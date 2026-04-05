@@ -1,0 +1,473 @@
+<Window x:Class="ReQuit.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:controls="clr-namespace:ReQuit.Controls"
+        Title="{DynamicResource Loc_Common_AppTitle}"
+        Icon="pack://application:,,,/app.ico"
+        Width="695" Height="430"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="NoResize">
+    <Window.RenderTransform>
+        <ScaleTransform x:Name="TrayHideScale" ScaleX="1" ScaleY="1"/>
+    </Window.RenderTransform>
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44"
+                            ResizeBorderThickness="0"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- Карточка опций: геометрия всегда одна (1px обводка); в покое фон и линия прозрачные — без сдвига при hover -->
+        <Style x:Key="Rs.OptionCard" TargetType="Border">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="9,6"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
+        <!-- Card label -->
+        <Style x:Key="Rs.OptionCard.Label" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Muted}"/>
+            <Setter Property="Margin" Value="2,0,0,5"/>
+        </Style>
+        <Style x:Key="Rs.OptionCard.Label.Centered" TargetType="TextBlock" BasedOn="{StaticResource Rs.OptionCard.Label}">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </Style>
+
+        <!-- «Только текст»: та же высота/ширина, что у PillTriggerMuted/PillTrigger (прозрачная рамка 1px) — без сдвига при hover карточки -->
+        <Style x:Key="Rs.PillTriggerPlain" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Rs.Accent}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Пилюля при наведении на карточку (не на пилюлю): серая обводка и фон -->
+        <Style x:Key="Rs.PillTriggerMuted" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Primary}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{DynamicResource Rs.PillMuted.Background}"
+                                BorderBrush="{DynamicResource Rs.Border}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Rs.PillMuted.BackgroundHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Rs.PillMuted.Background}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Текущий выбор: акцентная пилюля (наведение на саму пилюлю, список открыт) -->
+        <Style x:Key="Rs.PillTrigger" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Rs.Accent}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="#1A3DD4C3"
+                                BorderBrush="{DynamicResource Rs.Accent}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#223DD4C3"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#153DD4C3"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Пункт списка: по умолчанию серая пилюля, при наведении — акцентная -->
+        <Style x:Key="Rs.PillMenuItem" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Primary}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="MinWidth" Value="90"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{DynamicResource Rs.PillMuted.Background}"
+                                BorderBrush="{DynamicResource Rs.Border}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#223DD4C3"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Rs.Accent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Rs.Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#153DD4C3"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Rs.Accent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Rs.Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Подложка выпадающего списка: продолжение карточки вниз -->
+        <Style x:Key="Rs.PillDropdownShell" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Rs.OptionCard.Background}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Rs.OptionCard.Border}"/>
+            <Setter Property="BorderThickness" Value="1,0,1,1"/>
+            <Setter Property="CornerRadius" Value="0,0,8,8"/>
+            <Setter Property="Padding" Value="5,4,5,6"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource Rs.Window.Background}"
+            BorderBrush="{DynamicResource Rs.Border}"
+            BorderThickness="1">
+        <DockPanel>
+            <!-- ═══ Title bar ═══ -->
+            <Border DockPanel.Dock="Top" Height="44"
+                    Background="{DynamicResource Rs.Surface}"
+                    BorderBrush="{DynamicResource Rs.Border}"
+                    BorderThickness="0,0,0,1"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Background="Transparent" Padding="14,0,8,0"
+                            MouseLeftButtonDown="TitleBar_OnMouseDown">
+                        <StackPanel VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="ReQuit" FontSize="15" FontWeight="SemiBold"
+                                           VerticalAlignment="Bottom"
+                                           Cursor="Hand"
+                                           MouseLeftButtonDown="TitleBarAbout_OnMouseLeftButtonDown"/>
+                                <Button Click="TitleBarAbout_OnClick"
+                                        Style="{StaticResource Rs.TitleBar.AboutInfo}"/>
+                            </StackPanel>
+                            <TextBlock Text="{DynamicResource Loc_MainWindow_Subtitle}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource Rs.Text.Muted}"
+                                       Margin="0,1,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Button x:Name="BtnSettings"
+                            Grid.Column="1"
+                            Style="{StaticResource Rs.TitleBar.Button}"
+                            Padding="10,6"
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            ToolTip="{DynamicResource Loc_MainWindow_TooltipSettings}"
+                            Click="TitleBarSettings_OnClick">
+                        <Viewbox Width="12" Height="12">
+                            <Path Fill="{DynamicResource Rs.Text.Primary}"
+                                  Stretch="Uniform"
+                                  Data="M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M10,22C9.75,22 9.54,21.82 9.5,21.58L9.15,18.85C8.56,18.65 8,18.36 7.47,18L4.85,19.05C4.65,19.13 4.41,19.05 4.29,18.87L2.29,15.41C2.17,15.23 2.21,15 2.37,14.85L4.57,13.09C4.53,12.73 4.5,12.37 4.5,12C4.5,11.63 4.53,11.27 4.57,10.91L2.37,9.15C2.21,9 2.17,8.77 2.29,8.59L4.29,5.13C4.41,4.95 4.65,4.87 4.85,4.95L7.47,6C8,5.64 8.56,5.35 9.15,5.15L9.5,2.42C9.54,2.18 9.75,2 10,2H14C14.25,2 14.46,2.18 14.5,2.42L14.85,5.15C15.44,5.35 16,5.64 16.53,6L19.15,4.95C19.35,4.87 19.59,4.95 19.71,5.13L21.71,8.59C21.83,8.77 21.79,9 21.63,9.15L19.43,10.91C19.47,11.27 19.5,11.63 19.5,12C19.5,12.37 19.47,12.73 19.43,13.09L21.63,14.85C21.79,15 21.83,15.23 21.71,15.41L19.71,18.87C19.59,19.05 19.35,19.13 19.15,19.05L16.53,18C16,18.36 15.44,18.65 14.85,18.85L14.5,21.58C14.46,21.82 14.25,22 14,22H10Z"/>
+                        </Viewbox>
+                    </Button>
+
+                    <Button x:Name="TitleBarLangButton"
+                            Grid.Column="2"
+                            Margin="0,0,8,0"
+                            MinHeight="36"
+                            Padding="12,6"
+                            VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Click="TitleBarLanguage_OnClick"
+                            Style="{StaticResource Rs.Button}"
+                            ToolTip="{DynamicResource Loc_MainWindow_LanguageTooltip}">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Click="LanguageMenuItem_OnClick"
+                                          Header="Русский"
+                                          Tag="ru"/>
+                                <MenuItem Click="LanguageMenuItem_OnClick"
+                                          Header="English"
+                                          Tag="en"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+
+                    <StackPanel Grid.Column="3" Orientation="Horizontal">
+                        <Button x:Name="BtnMinimizeToTray"
+                                Style="{StaticResource Rs.TitleBar.Button}"
+                                Content="&#x2B07;"
+                                ToolTip="{DynamicResource Loc_MainWindow_TooltipMinimizeToTray}"
+                                Click="TitleBarMinimizeToTray_OnClick"/>
+                        <Button x:Name="BtnMinimize"
+                                Style="{StaticResource Rs.TitleBar.Button}"
+                                Content="&#x2212;"
+                                ToolTip="{DynamicResource Loc_MainWindow_TooltipMinimize}"
+                                Click="BtnMinimize_OnClick"/>
+                        <Button x:Name="BtnClose"
+                                Style="{StaticResource Rs.TitleBar.Close}"
+                                Content="&#x00D7;"
+                                ToolTip="{DynamicResource Loc_MainWindow_TooltipClose}"
+                                Click="BtnClose_OnClick"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ═══ Content ═══ -->
+            <Grid Margin="30,30,30,18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Status text (hidden, used programmatically during delay) -->
+                <TextBlock x:Name="StatusText" Grid.Row="0"
+                           FontSize="15"
+                           Foreground="{DynamicResource Rs.Text.Muted}"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,4"/>
+
+                <!-- ═══ Timer display ═══ -->
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top">
+
+                    <controls:TimerDigitGroup x:Name="HoursDigit"
+                                              MaxValue="24" UnitText=""/>
+
+                    <TextBlock x:Name="Colon1" Text=":"
+                               FontSize="68" FontWeight="Bold"
+                               Foreground="{DynamicResource Rs.Text.Muted}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,8,0"
+                               Opacity="0.5"/>
+
+                    <controls:TimerDigitGroup x:Name="MinutesDigit"
+                                              MaxValue="59" UnitText=""/>
+
+                    <TextBlock x:Name="Colon2" Text=":"
+                               FontSize="68" FontWeight="Bold"
+                               Foreground="{DynamicResource Rs.Text.Muted}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,8,0"
+                               Opacity="0.5"/>
+
+                    <controls:TimerDigitGroup x:Name="SecondsDigit"
+                                              MaxValue="59" UnitText=""/>
+                </StackPanel>
+
+                <!-- ═══ Bottom: action + start + delay ═══ -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- ── Left: Action selector (одна пилюля + выпадающий список) ── -->
+                    <Border x:Name="ActionOptionCard"
+                            Grid.Column="0"
+                            Style="{StaticResource Rs.OptionCard}"
+                            MouseEnter="ActionOptionCard_OnMouseEnter"
+                            MouseLeave="ActionOptionCard_OnMouseLeave">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="{DynamicResource Loc_MainWindow_ActionAfterExpiry}"
+                                       Style="{StaticResource Rs.OptionCard.Label.Centered}"/>
+                            <Button x:Name="ActionPillTrigger"
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource Rs.PillTriggerPlain}"
+                                    MouseEnter="ActionPill_OnMouseEnter"
+                                    MouseLeave="ActionPill_OnMouseLeave">
+                                <TextBlock x:Name="ActionPillText"
+                                           Text="Выключение"
+                                           TextAlignment="Center"/>
+                            </Button>
+                            <Popup x:Name="ActionPopup"
+                                   PlacementTarget="{Binding ElementName=ActionOptionCard}"
+                                   Placement="Bottom"
+                                   VerticalOffset="-1"
+                                   HorizontalOffset="0"
+                                   AllowsTransparency="True"
+                                   StaysOpen="True"
+                                   PopupAnimation="Fade">
+                                <Border Style="{StaticResource Rs.PillDropdownShell}"
+                                        Width="{Binding ActualWidth, ElementName=ActionOptionCard}"
+                                        MouseEnter="ActionPopupSurface_OnMouseEnter"
+                                        MouseLeave="ActionPopupSurface_OnMouseLeave">
+                                    <StackPanel>
+                                        <Button Style="{StaticResource Rs.PillMenuItem}"
+                                                Content="{DynamicResource Loc_MainWindow_ActionShutdown}"
+                                                Click="ActionPickShutdown_OnClick"/>
+                                        <Button Margin="0"
+                                                Style="{StaticResource Rs.PillMenuItem}"
+                                                Content="{DynamicResource Loc_MainWindow_ActionSignal}"
+                                                Click="ActionPickSignal_OnClick"/>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ── Center: Start / Stop ── -->
+                    <Button x:Name="BtnStartStop" Grid.Column="1"
+                            Content="Старт"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MinWidth="200" Padding="24,12"
+                            FontSize="15"
+                            IsEnabled="False"
+                            Style="{StaticResource Rs.Button.Accent}"
+                            Click="BtnStartStop_OnClick"/>
+
+                    <!-- ── Right: Delay selector (одна пилюля + выпадающий список) ── -->
+                    <Border x:Name="DelayOptionCard"
+                            Grid.Column="2"
+                            Style="{StaticResource Rs.OptionCard}"
+                            MouseEnter="DelayOptionCard_OnMouseEnter"
+                            MouseLeave="DelayOptionCard_OnMouseLeave">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Style="{StaticResource Rs.OptionCard.Label.Centered}"
+                                       Text="{DynamicResource Loc_MainWindow_DelayLabel}"/>
+                            <Button x:Name="DelayPillTrigger"
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource Rs.PillTriggerPlain}"
+                                    MouseEnter="DelayPill_OnMouseEnter"
+                                    MouseLeave="DelayPill_OnMouseLeave">
+                                <TextBlock x:Name="DelayPillText"
+                                           Text="Нет"
+                                           TextAlignment="Center"/>
+                            </Button>
+                            <Popup x:Name="DelayPopup"
+                                   PlacementTarget="{Binding ElementName=DelayOptionCard}"
+                                   Placement="Bottom"
+                                   VerticalOffset="-1"
+                                   HorizontalOffset="0"
+                                   AllowsTransparency="True"
+                                   StaysOpen="True"
+                                   PopupAnimation="Fade">
+                                <Border Style="{StaticResource Rs.PillDropdownShell}"
+                                        Width="{Binding ActualWidth, ElementName=DelayOptionCard}"
+                                        MouseEnter="DelayPopupSurface_OnMouseEnter"
+                                        MouseLeave="DelayPopupSurface_OnMouseLeave">
+                                    <StackPanel>
+                                        <Button Style="{StaticResource Rs.PillMenuItem}"
+                                                Content="{DynamicResource Loc_MainWindow_DelayNone}"
+                                                Tag="0" Click="DelayPick_OnClick"/>
+                                        <Button Style="{StaticResource Rs.PillMenuItem}"
+                                                Content="{DynamicResource Loc_MainWindow_Delay30s}"
+                                                Tag="30" Click="DelayPick_OnClick"/>
+                                        <Button Style="{StaticResource Rs.PillMenuItem}"
+                                                Content="{DynamicResource Loc_MainWindow_Delay1m}"
+                                                Tag="60" Click="DelayPick_OnClick"/>
+                                        <Button Margin="0"
+                                                Style="{StaticResource Rs.PillMenuItem}"
+                                                Content="{DynamicResource Loc_MainWindow_Delay5m}"
+                                                Tag="300" Click="DelayPick_OnClick"/>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </DockPanel>
+    </Border>
+</Window>
