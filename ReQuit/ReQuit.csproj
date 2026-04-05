@@ -16,7 +16,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="app.ico" />
+    <Resource Include="Assets\sound-03-minecraft.mp3" />
     <EmbeddedResource Include="Localization\*.json" />
   </ItemGroup>
 

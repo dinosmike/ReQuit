@@ -38,6 +38,10 @@
     <SolidColorBrush x:Key="Rs.Button.Danger.Border" Color="#6F1F1F"/>
     <SolidColorBrush x:Key="Rs.Button.Danger.BorderHover" Color="#D43D3D"/>
     <SolidColorBrush x:Key="Rs.Button.Danger.Foreground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Rs.Button.Success.Background" Color="#12241A"/>
+    <SolidColorBrush x:Key="Rs.Button.Success.Border" Color="#1F6F3D"/>
+    <SolidColorBrush x:Key="Rs.Button.Success.BorderHover" Color="#3DD48A"/>
+    <SolidColorBrush x:Key="Rs.Button.Success.Foreground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="Rs.Button.PressedBackground" Color="#1C2128"/>
     <SolidColorBrush x:Key="Rs.TitleBar.ButtonHoverBackground" Color="#2D333B"/>
     <SolidColorBrush x:Key="Rs.TitleBar.ButtonPressedBackground" Color="#3D444D"/>
@@ -306,6 +310,37 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Rs.Button.Danger.BorderHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Rs.Button.Success" TargetType="Button" BasedOn="{StaticResource Rs.Button}">
+        <Setter Property="Background" Value="{DynamicResource Rs.Button.Success.Background}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource Rs.Button.Success.Border}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Rs.Button.Success.Foreground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Rs.Button.Success.BorderHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Rs.Button.Success.BorderHover}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>

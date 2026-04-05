@@ -213,12 +213,47 @@
             <Setter Property="Padding" Value="5,4,5,6"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
         </Style>
+
+        <!-- Эквалайзер «играет мелодия» на экране «Сигнал сработал» -->
+        <Storyboard x:Key="SignalEqualizerStoryboard">
+            <DoubleAnimation Storyboard.TargetName="SignalEqScale0" Storyboard.TargetProperty="ScaleY"
+                             From="0.22" To="1" Duration="0:0:0.38" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="SignalEqScale1" Storyboard.TargetProperty="ScaleY"
+                             From="0.22" To="1" Duration="0:0:0.42" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.07">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="SignalEqScale2" Storyboard.TargetProperty="ScaleY"
+                             From="0.22" To="1" Duration="0:0:0.36" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.14">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="SignalEqScale3" Storyboard.TargetProperty="ScaleY"
+                             From="0.22" To="1" Duration="0:0:0.44" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.05">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="SignalEqScale4" Storyboard.TargetProperty="ScaleY"
+                             From="0.22" To="1" Duration="0:0:0.40" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.11">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
     </Window.Resources>
 
     <Border Background="{DynamicResource Rs.Window.Background}"
             BorderBrush="{DynamicResource Rs.Border}"
             BorderThickness="1">
-        <DockPanel>
+        <Grid>
+        <DockPanel x:Name="MainContentRoot">
             <!-- ═══ Title bar ═══ -->
             <Border DockPanel.Dock="Top" Height="44"
                     Background="{DynamicResource Rs.Surface}"
@@ -415,7 +450,13 @@
                             FontSize="15"
                             IsEnabled="False"
                             Style="{StaticResource Rs.Button.Accent}"
-                            Click="BtnStartStop_OnClick"/>
+                            RenderTransformOrigin="0.5,0.5"
+                            Click="BtnStartStop_OnClick"
+                            MouseRightButtonDown="BtnStartStop_OnMouseRightButtonDown">
+                        <Button.RenderTransform>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                        </Button.RenderTransform>
+                    </Button>
 
                     <!-- ── Right: Delay selector (одна пилюля + выпадающий список) ── -->
                     <Border x:Name="DelayOptionCard"
@@ -469,5 +510,113 @@
                 </Grid>
             </Grid>
         </DockPanel>
+        <!-- Отсрочка / сигнал: размытие MainContentRoot + 50% чёрная плёнка, блокировка кликов -->
+        <Grid x:Name="DelayPhaseMainDimmer"
+              Visibility="Collapsed"
+              Focusable="True"
+              Background="Transparent">
+            <Border IsHitTestVisible="False"
+                    SnapsToDevicePixels="True">
+                <Border.Background>
+                    <VisualBrush Visual="{Binding ElementName=MainContentRoot}"
+                                 Stretch="UniformToFill"
+                                 AlignmentX="Center"
+                                 AlignmentY="Center"/>
+                </Border.Background>
+                <Border.Effect>
+                    <BlurEffect Radius="96"
+                                KernelType="Gaussian"
+                                RenderingBias="Quality"/>
+                </Border.Effect>
+            </Border>
+            <!-- ~80% непрозрачность чёрного; перетаскивание окна за эту плёнку -->
+            <Border Background="#CC000000"
+                    IsHitTestVisible="True"
+                    MouseLeftButtonDown="DelayPhaseMainDimmerDark_OnMouseLeftButtonDown"/>
+        </Grid>
+        <!-- Сигнал сработал: плёнка уже включена, сверху текст и «Ок» -->
+        <Grid x:Name="SignalFinishedOverlay"
+              Visibility="Collapsed"
+              Background="Transparent"
+              IsHitTestVisible="True"
+              MouseLeftButtonDown="SignalFinishedOverlay_OnMouseLeftButtonDown">
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="520">
+                <!-- Векторный «эквалайзер»: полосы масштабируются от низа (RenderTransformOrigin 0.5,1) -->
+                <Grid Width="108" Height="44"
+                      HorizontalAlignment="Center"
+                      Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
+                            Margin="0,0,4,0"
+                            Background="{DynamicResource Rs.Accent}"
+                            RenderTransformOrigin="0.5,1"
+                            SnapsToDevicePixels="True">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="SignalEqScale0" ScaleX="1" ScaleY="0.35"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Border Grid.Column="1" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
+                            Margin="0,0,4,0"
+                            Background="{DynamicResource Rs.Accent}"
+                            RenderTransformOrigin="0.5,1"
+                            SnapsToDevicePixels="True">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="SignalEqScale1" ScaleX="1" ScaleY="0.35"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Border Grid.Column="2" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
+                            Margin="0,0,4,0"
+                            Background="{DynamicResource Rs.Accent}"
+                            RenderTransformOrigin="0.5,1"
+                            SnapsToDevicePixels="True">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="SignalEqScale2" ScaleX="1" ScaleY="0.35"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Border Grid.Column="3" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
+                            Margin="0,0,4,0"
+                            Background="{DynamicResource Rs.Accent}"
+                            RenderTransformOrigin="0.5,1"
+                            SnapsToDevicePixels="True">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="SignalEqScale3" ScaleX="1" ScaleY="0.35"/>
+                        </Border.RenderTransform>
+                    </Border>
+                    <Border Grid.Column="4" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
+                            Background="{DynamicResource Rs.Accent}"
+                            RenderTransformOrigin="0.5,1"
+                            SnapsToDevicePixels="True">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="SignalEqScale4" ScaleX="1" ScaleY="0.35"/>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
+                <TextBlock Text="{DynamicResource Loc_MainWindow_SignalFinishedMessage}"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Rs.Text.Primary}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Margin="0,0,0,24"/>
+                <Button x:Name="BtnSignalFinishedOk"
+                        MinWidth="200"
+                        Padding="24,12"
+                        FontSize="15"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource Rs.Button.Accent}"
+                        Content="{DynamicResource Loc_MainWindow_SignalFinishedOk}"
+                        Click="BtnSignalFinishedOk_OnClick"
+                        IsDefault="True"/>
+            </StackPanel>
+        </Grid>
+        </Grid>
     </Border>
 </Window>

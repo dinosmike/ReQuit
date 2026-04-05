@@ -23,6 +23,8 @@ public partial class TimerDigitGroup : UserControl
     private const double TickAnimMs = 300;
     private const double InputAnimMs = 180;
     private const double DefaultCellHeight = 136;
+    /// <summary>Совпадает с CornerRadius у DigitBorder в XAML — обрезка содержимого по скруглению.</summary>
+    private const double DigitBorderCornerRadius = 20;
 
     public static readonly DependencyProperty MaxValueProperty =
         DependencyProperty.Register(nameof(MaxValue), typeof(int), typeof(TimerDigitGroup),
@@ -72,6 +74,22 @@ public partial class TimerDigitGroup : UserControl
     {
         InitializeComponent();
         ApplyDigitTheme();
+        DigitBorder.SizeChanged += (_, _) => UpdateDigitBorderClip();
+        Loaded += (_, _) => UpdateDigitBorderClip();
+    }
+
+    /// <summary>
+    /// WPF не обрезает дочерние элементы Border по CornerRadius — градиенты/цифры дают прямоугольник за скруглением.
+    /// </summary>
+    private void UpdateDigitBorderClip()
+    {
+        if (DigitBorder.ActualWidth <= 0 || DigitBorder.ActualHeight <= 0)
+            return;
+
+        DigitBorder.Clip = new RectangleGeometry(
+            new Rect(0, 0, DigitBorder.ActualWidth, DigitBorder.ActualHeight),
+            DigitBorderCornerRadius,
+            DigitBorderCornerRadius);
     }
 
     private static void OnUnitTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -115,8 +133,10 @@ public partial class TimerDigitGroup : UserControl
         var brush = ShutdownAction
             ? (Brush)FindResource("Rs.Danger")
             : (Brush)FindResource("Rs.Text.Primary");
-        CurrentText.Foreground = brush;
-        IncomingText.Foreground = brush;
+        CurrentTensText.Foreground = brush;
+        IncomingTensText.Foreground = brush;
+        CurrentOnesText.Foreground = brush;
+        IncomingOnesText.Foreground = brush;
     }
 
     private void ResetArrowStrokeIdle()
@@ -159,13 +179,14 @@ public partial class TimerDigitGroup : UserControl
     public void AnimateToValue(int newValue, bool slideDown = true)
     {
         newValue = Wrap(newValue);
-        if (newValue == _value && !_isAnimating) return;
+        int prev = _value;
+        if (newValue == prev && !_isAnimating) return;
 
         if (_isAnimating)
             SnapFinish();
 
         _value = newValue;
-        RunSlideAnimation(newValue, slideDown, TickAnimMs);
+        RunSlideAnimation(prev, newValue, slideDown, TickAnimMs);
     }
 
     /// <summary>
@@ -177,70 +198,135 @@ public partial class TimerDigitGroup : UserControl
             SnapFinish();
 
         _value = Wrap(newValue);
-        CurrentText.Text = _value.ToString("D2");
+        ApplyDigitDisplay(_value);
+    }
+
+    private void ApplyDigitDisplay(int v)
+    {
+        int tens = v / 10;
+        int ones = v % 10;
+        CurrentTensText.Text = tens.ToString();
+        CurrentOnesText.Text = ones.ToString();
+        CurrentTensTransform.Y = 0;
+        IncomingTensTransform.Y = 0;
+        CurrentOnesTransform.Y = 0;
+        IncomingOnesTransform.Y = 0;
+        IncomingTensText.Visibility = Visibility.Collapsed;
+        IncomingOnesText.Visibility = Visibility.Collapsed;
     }
 
     private void StepFromInput(int delta, bool slideDown)
     {
+        int prev = _value;
         int newVal = Wrap(_value + delta);
-        if (newVal == _value) return;
+        if (newVal == prev) return;
 
         if (_isAnimating)
             SnapFinish();
 
         _value = newVal;
-        RunSlideAnimation(newVal, slideDown, InputAnimMs);
+        RunSlideAnimation(prev, newVal, slideDown, InputAnimMs);
         ValueChanged?.Invoke();
     }
 
-    private void RunSlideAnimation(int newValue, bool slideDown, double durationMs)
+    private void RunSlideAnimation(int from, int to, bool slideDown, double durationMs)
     {
         _isAnimating = true;
 
-        IncomingText.Text = newValue.ToString("D2");
-        IncomingText.Visibility = Visibility.Visible;
+        int fromTens = from / 10;
+        int fromOnes = from % 10;
+        int toTens = to / 10;
+        int toOnes = to % 10;
+        bool tensChanges = fromTens != toTens;
 
         double h = DigitBorder.ActualHeight > 0 ? DigitBorder.ActualHeight : DefaultCellHeight;
         double inStart = slideDown ? -h : h;
         double curEnd = slideDown ? h : -h;
 
-        IncomingTransform.Y = inStart;
-        CurrentTransform.Y = 0;
-
         var dur = TimeSpan.FromMilliseconds(durationMs);
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-        var animCur = new DoubleAnimation(0, curEnd, dur) { EasingFunction = ease };
-        var animInc = new DoubleAnimation(inStart, 0, dur) { EasingFunction = ease };
-
-        int capturedValue = newValue;
-        animInc.Completed += (_, _) =>
+        if (tensChanges)
         {
-            CurrentTransform.BeginAnimation(TranslateTransform.YProperty, null);
-            IncomingTransform.BeginAnimation(TranslateTransform.YProperty, null);
+            CurrentTensText.Text = fromTens.ToString();
+            IncomingTensText.Text = toTens.ToString();
+            CurrentOnesText.Text = fromOnes.ToString();
+            IncomingOnesText.Text = toOnes.ToString();
+            IncomingTensText.Visibility = Visibility.Visible;
+            IncomingOnesText.Visibility = Visibility.Visible;
 
-            CurrentText.Text = capturedValue.ToString("D2");
-            CurrentTransform.Y = 0;
-            IncomingTransform.Y = 0;
-            IncomingText.Visibility = Visibility.Collapsed;
-            _isAnimating = false;
-        };
+            IncomingTensTransform.Y = inStart;
+            CurrentTensTransform.Y = 0;
+            IncomingOnesTransform.Y = inStart;
+            CurrentOnesTransform.Y = 0;
 
-        CurrentTransform.BeginAnimation(TranslateTransform.YProperty, animCur);
-        IncomingTransform.BeginAnimation(TranslateTransform.YProperty, animInc);
+            var animCurT = new DoubleAnimation(0, curEnd, dur) { EasingFunction = ease };
+            var animIncT = new DoubleAnimation(inStart, 0, dur) { EasingFunction = ease };
+            var animCurO = new DoubleAnimation(0, curEnd, dur) { EasingFunction = ease };
+            var animIncO = new DoubleAnimation(inStart, 0, dur) { EasingFunction = ease };
+
+            int capturedTo = to;
+            animIncO.Completed += (_, _) => OnSlideComplete(capturedTo);
+
+            CurrentTensTransform.BeginAnimation(TranslateTransform.YProperty, animCurT);
+            IncomingTensTransform.BeginAnimation(TranslateTransform.YProperty, animIncT);
+            CurrentOnesTransform.BeginAnimation(TranslateTransform.YProperty, animCurO);
+            IncomingOnesTransform.BeginAnimation(TranslateTransform.YProperty, animIncO);
+        }
+        else
+        {
+            CurrentTensText.Text = toTens.ToString();
+            IncomingTensText.Visibility = Visibility.Collapsed;
+            CurrentTensTransform.Y = 0;
+            IncomingTensTransform.Y = 0;
+
+            CurrentOnesText.Text = fromOnes.ToString();
+            IncomingOnesText.Text = toOnes.ToString();
+            IncomingOnesText.Visibility = Visibility.Visible;
+
+            IncomingOnesTransform.Y = inStart;
+            CurrentOnesTransform.Y = 0;
+
+            var animCurO = new DoubleAnimation(0, curEnd, dur) { EasingFunction = ease };
+            var animIncO = new DoubleAnimation(inStart, 0, dur) { EasingFunction = ease };
+
+            int capturedTo = to;
+            animIncO.Completed += (_, _) => OnSlideComplete(capturedTo);
+
+            CurrentOnesTransform.BeginAnimation(TranslateTransform.YProperty, animCurO);
+            IncomingOnesTransform.BeginAnimation(TranslateTransform.YProperty, animIncO);
+        }
+    }
+
+    private void OnSlideComplete(int capturedTo)
+    {
+        CurrentTensTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        IncomingTensTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        CurrentOnesTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        IncomingOnesTransform.BeginAnimation(TranslateTransform.YProperty, null);
+
+        ApplyDigitDisplay(capturedTo);
+        _isAnimating = false;
     }
 
     private void SnapFinish()
     {
-        CurrentTransform.BeginAnimation(TranslateTransform.YProperty, null);
-        IncomingTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        CurrentTensTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        IncomingTensTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        CurrentOnesTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        IncomingOnesTransform.BeginAnimation(TranslateTransform.YProperty, null);
 
-        if (IncomingText.Visibility == Visibility.Visible)
-            CurrentText.Text = IncomingText.Text;
+        if (IncomingTensText.Visibility == Visibility.Visible)
+            CurrentTensText.Text = IncomingTensText.Text;
+        if (IncomingOnesText.Visibility == Visibility.Visible)
+            CurrentOnesText.Text = IncomingOnesText.Text;
 
-        CurrentTransform.Y = 0;
-        IncomingTransform.Y = 0;
-        IncomingText.Visibility = Visibility.Collapsed;
+        CurrentTensTransform.Y = 0;
+        IncomingTensTransform.Y = 0;
+        CurrentOnesTransform.Y = 0;
+        IncomingOnesTransform.Y = 0;
+        IncomingTensText.Visibility = Visibility.Collapsed;
+        IncomingOnesText.Visibility = Visibility.Collapsed;
         _isAnimating = false;
     }
 
@@ -298,7 +384,7 @@ public partial class TimerDigitGroup : UserControl
         int old = _value;
         _value = target;
         bool slideDown = target < old;
-        RunSlideAnimation(target, slideDown, InputAnimMs);
+        RunSlideAnimation(old, target, slideDown, InputAnimMs);
         ValueChanged?.Invoke();
     }
 
@@ -315,8 +401,9 @@ public partial class TimerDigitGroup : UserControl
         if (_isAnimating)
             SnapFinish();
 
+        int old = _value;
         _value = 0;
-        RunSlideAnimation(0, slideDown: true, InputAnimMs);
+        RunSlideAnimation(old, 0, slideDown: true, InputAnimMs);
         ValueChanged?.Invoke();
     }
 

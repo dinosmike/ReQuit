@@ -1,8 +1,10 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Media;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using NAudio.Wave;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -19,7 +21,7 @@ namespace ReQuit;
 
 public partial class MainWindow : Window
 {
-    private enum TimerState { Idle, Running, DelayCountdown }
+    private enum TimerState { Idle, Running, DelayCountdown, SignalFinished }
     private enum ActionKind { Shutdown, Signal }
 
     private TimerState _state = TimerState.Idle;
@@ -36,8 +38,28 @@ public partial class MainWindow : Window
     private const double TrayFlyEndScale = 0.14;
 
     private const int PillPopupCloseDelayMs = 200;
+    /// <summary>Половина цикла мигания «:» (вторая половина — AutoReverse); в сумме ровно 1 с на один полный цикл.</summary>
+    private const int ColonPulseHalfDurationMs = 500;
     private DispatcherTimer? _closeActionPopupTimer;
     private DispatcherTimer? _closeDelayPopupTimer;
+
+    private DelayOverlayWindow? _delayOverlay;
+
+    private const uint WmNcLButtonDown = 0xA1;
+    private const int HtCaption = 2;
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>Воспроизведение встроенного MP3 из памяти (NAudio), без файлов на диске.</summary>
+    private static readonly object SignalPlaybackLock = new();
+
+    private static IWavePlayer? _signalWaveOut;
+    private static Mp3FileReader? _signalMp3Reader;
+    private static MemoryStream? _signalMp3Memory;
 
     private static readonly Thickness OptionCardBorderClosed = new(1, 1, 1, 1);
     private static readonly Thickness OptionCardBorderDropOpen = new(1, 1, 1, 0);
@@ -46,6 +68,11 @@ public partial class MainWindow : Window
     private bool _actionMouseInPill;
     private bool _delayMouseInCard;
     private bool _delayMouseInPill;
+
+    /// <summary>Для анимации смены «Старт» ↔ «Стоп»: null до первого UpdateButtonState.</summary>
+    private bool? _wasShowingStopButton;
+
+    private Storyboard? _signalEqualizerStoryboard;
 
     public MainWindow()
     {
@@ -58,6 +85,8 @@ public partial class MainWindow : Window
         var stored = SettingsStorage.Load().Timer;
         _actionIsSignal = stored.ActionIsSignal;
         _delaySeconds = stored.DelaySeconds;
+        if (_actionIsSignal)
+            _delaySeconds = 0;
 
         LocalizationService.LanguageChanged += OnLocalizationLanguageChanged;
         Unloaded += MainWindow_OnUnloaded;
@@ -67,8 +96,12 @@ public partial class MainWindow : Window
         Loaded += (_, _) =>
         {
             ApplyActionOptionCardVisuals();
+            UpdateDelayOptionCardVisibility();
             ApplyDelayOptionCardVisuals();
         };
+
+        // TEMP: превью окна отсрочки по клавише Q — удалить вместе с регионом TEMP ниже
+        PreviewKeyDown += MainWindow_PreviewKeyDown_TempDelayOverlayTest;
     }
 
     private void OnLocalizationLanguageChanged() => RefreshLocalizedUi();
@@ -89,6 +122,23 @@ public partial class MainWindow : Window
         UpdateButtonState();
         UpdateStatusText();
         ApplyActionVisualTheme();
+        UpdateDelayOptionCardVisibility();
+    }
+
+    private void UpdateDelayOptionCardVisibility()
+    {
+        if (_actionIsSignal)
+        {
+            CancelCloseDelayPopup();
+            DelayPopup.IsOpen = false;
+            DelayOptionCard.Visibility = Visibility.Hidden;
+            DelayOptionCard.IsHitTestVisible = false;
+        }
+        else
+        {
+            DelayOptionCard.Visibility = Visibility.Visible;
+            DelayOptionCard.IsHitTestVisible = true;
+        }
     }
 
     internal void ReloadWindowSettingsFromDisk() => ApplyCloseButtonAppearance();
@@ -111,7 +161,7 @@ public partial class MainWindow : Window
         MinutesDigit.ShutdownAction = shutdown;
         SecondsDigit.ShutdownAction = shutdown;
 
-        if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
+        if (_state == TimerState.Running)
             StartColonBlink();
         else
             StopColonBlink();
@@ -146,7 +196,7 @@ public partial class MainWindow : Window
     private ActionKind SelectedAction =>
         _actionIsSignal ? ActionKind.Signal : ActionKind.Shutdown;
 
-    private int GetDelaySeconds() => _delaySeconds;
+    private int GetDelaySeconds() => _actionIsSignal ? 0 : _delaySeconds;
 
     private void ResetActionOptionCardChrome()
     {
@@ -359,29 +409,29 @@ public partial class MainWindow : Window
 
     private void ActionPickShutdown_OnClick(object sender, RoutedEventArgs e)
     {
-        bool wasSignal = _actionIsSignal;
         _actionIsSignal = false;
         ActionPillText.Text = LocalizationService.T("MainWindow.ActionShutdown");
-        if (_state == TimerState.DelayCountdown && wasSignal)
-            ScheduleSystemShutdown(_remainingSeconds);
+        _delaySeconds = 60;
+        DelayPillText.Text = GetDelayLabelText(60);
         CancelCloseActionPopup();
         ActionPopup.IsOpen = false;
         ApplyActionOptionCardVisuals();
         ApplyActionVisualTheme();
+        UpdateDelayOptionCardVisibility();
         PersistTimerSettings();
     }
 
     private void ActionPickSignal_OnClick(object sender, RoutedEventArgs e)
     {
-        bool wasShutdown = !_actionIsSignal;
         _actionIsSignal = true;
         ActionPillText.Text = LocalizationService.T("MainWindow.ActionSignal");
-        if (_state == TimerState.DelayCountdown && wasShutdown)
-            AbortSystemShutdown();
+        _delaySeconds = 0;
+        DelayPillText.Text = GetDelayLabelText(0);
         CancelCloseActionPopup();
         ActionPopup.IsOpen = false;
         ApplyActionOptionCardVisuals();
         ApplyActionVisualTheme();
+        UpdateDelayOptionCardVisibility();
         PersistTimerSettings();
     }
 
@@ -402,21 +452,17 @@ public partial class MainWindow : Window
 
         if (sec == 0)
         {
-            AbortSystemShutdown();
             _countdown?.Stop();
             _countdown = null;
+            CloseDelayOverlay();
             ExecuteAction();
             return;
         }
 
         _remainingSeconds = sec;
-        if (SelectedAction == ActionKind.Shutdown)
-        {
-            AbortSystemShutdown();
-            ScheduleSystemShutdown(sec);
-        }
         UpdateTimerDisplay();
         UpdateStatusText();
+        SyncDelayOverlayCountdown();
     }
 
     private void OnAnyDigitChanged()
@@ -466,6 +512,7 @@ public partial class MainWindow : Window
         _state = TimerState.Idle;
         _countdown?.Stop();
         _countdown = null;
+        CloseDelayOverlay();
         SetDigitsReadOnly(false);
         SetOptionsEnabled(true);
         UpdateButtonState();
@@ -473,8 +520,74 @@ public partial class MainWindow : Window
         StopColonBlink();
         UpdateStartEnabled();
 
-        if (wasDelay && SelectedAction == ActionKind.Shutdown)
-            AbortSystemShutdown();
+    }
+
+    private void ShowDelayOverlay()
+    {
+        CloseDelayOverlay();
+        var w = new DelayOverlayWindow();
+        w.SetActionMode(_actionIsSignal);
+        w.SetRemainingSeconds(_remainingSeconds);
+        w.CancelRequested += DelayOverlay_OnCancelRequested;
+        w.ConfirmNowRequested += DelayOverlay_OnConfirmNowRequested;
+        w.Show();
+        _delayOverlay = w;
+        SetDelayPhaseMainDimmer(true);
+    }
+
+    private void CloseDelayOverlay()
+    {
+        SetDelayPhaseMainDimmer(false);
+        if (_delayOverlay == null)
+            return;
+        _delayOverlay.CancelRequested -= DelayOverlay_OnCancelRequested;
+        _delayOverlay.ConfirmNowRequested -= DelayOverlay_OnConfirmNowRequested;
+        _delayOverlay.Close();
+        _delayOverlay = null;
+    }
+
+    private void SetDelayPhaseMainDimmer(bool active, bool stealFocusWithDimmer = true)
+    {
+        DelayPhaseMainDimmer.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        if (!active || !stealFocusWithDimmer)
+            return;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try { DelayPhaseMainDimmer.Focus(); }
+            catch { /* ignored */ }
+        }), DispatcherPriority.Input);
+    }
+
+    private void SyncDelayOverlayCountdown()
+    {
+        if (_state == TimerState.DelayCountdown)
+            _delayOverlay?.SetRemainingSeconds(_remainingSeconds);
+    }
+
+    private void DelayOverlay_OnCancelRequested(object? sender, EventArgs e)
+    {
+        if (_delayOverlay != null && ReferenceEquals(sender, _delayOverlay))
+            StopTimer();
+    }
+
+    private void DelayOverlay_OnConfirmNowRequested(object? sender, EventArgs e)
+    {
+        if (_delayOverlay != null && ReferenceEquals(sender, _delayOverlay))
+            DelayOverlayConfirmNow();
+    }
+
+    private void DelayOverlayConfirmNow()
+    {
+        if (_state != TimerState.DelayCountdown)
+            return;
+
+        _countdown?.Stop();
+        _countdown = null;
+        _remainingSeconds = 0;
+        UpdateTimerDisplay();
+        CloseDelayOverlay();
+
+        ExecuteAction();
     }
 
     private void OnCountdownTick(object? sender, EventArgs e)
@@ -491,6 +604,7 @@ public partial class MainWindow : Window
             int delaySec = GetDelaySeconds();
             if (delaySec > 0)
             {
+                PulseColonForOneSecond();
                 StartDelayCountdown(delaySec);
             }
             else
@@ -501,19 +615,21 @@ public partial class MainWindow : Window
         }
 
         UpdateTimerDisplay();
+        PulseColonForOneSecond();
     }
 
     private void StartDelayCountdown(int delaySec)
     {
-        if (SelectedAction == ActionKind.Shutdown)
-            ScheduleSystemShutdown(delaySec);
-
         _remainingSeconds = delaySec;
         _state = TimerState.DelayCountdown;
 
+        // Главный таймер остаётся на нуле; отсчёт отсрочки только в оверлее
         UpdateTimerDisplay();
         UpdateButtonState();
         UpdateStatusText();
+        StopColonBlink();
+
+        ShowDelayOverlay();
 
         _countdown = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _countdown.Tick += OnDelayTick;
@@ -527,25 +643,14 @@ public partial class MainWindow : Window
         if (_remainingSeconds <= 0)
         {
             _remainingSeconds = 0;
-            UpdateTimerDisplay();
             _countdown?.Stop();
             _countdown = null;
-
-            if (SelectedAction == ActionKind.Signal)
-                ExecuteAction();
-
-            _state = TimerState.Idle;
-            SetDigitsReadOnly(false);
-            SetOptionsEnabled(true);
-            UpdateButtonState();
-            StopColonBlink();
-            UpdateStartEnabled();
-            StatusText.Text = "";
+            CloseDelayOverlay();
+            ExecuteAction();
             return;
         }
 
-        UpdateTimerDisplay();
-        UpdateStatusText();
+        SyncDelayOverlayCountdown();
     }
 
     private void ExecuteAction()
@@ -553,7 +658,7 @@ public partial class MainWindow : Window
         switch (SelectedAction)
         {
             case ActionKind.Shutdown:
-                ScheduleSystemShutdown(0);
+                InitiateImmediateSystemShutdown();
                 _state = TimerState.Idle;
                 SetDigitsReadOnly(false);
                 SetOptionsEnabled(true);
@@ -564,20 +669,57 @@ public partial class MainWindow : Window
                 break;
 
             case ActionKind.Signal:
-                PlayAlarmSignal();
-                _state = TimerState.Idle;
-                SetDigitsReadOnly(false);
-                SetOptionsEnabled(true);
-                UpdateButtonState();
-                StopColonBlink();
-                UpdateStartEnabled();
-                StatusText.Text = "";
+                ShowSignalFinishedOverlay();
                 break;
         }
     }
 
+    private void ShowSignalFinishedOverlay()
+    {
+        PlayAlarmSignal();
+        SetDelayPhaseMainDimmer(true, stealFocusWithDimmer: false);
+        SignalFinishedOverlay.Visibility = Visibility.Visible;
+        _signalEqualizerStoryboard ??= TryFindResource("SignalEqualizerStoryboard") as Storyboard;
+        _signalEqualizerStoryboard?.Begin(SignalFinishedOverlay, isControllable: true);
+        _state = TimerState.SignalFinished;
+        SetDigitsReadOnly(true);
+        SetOptionsEnabled(false);
+        UpdateButtonState();
+        StopColonBlink();
+        StatusText.Text = "";
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try { BtnSignalFinishedOk.Focus(); }
+            catch { /* ignored */ }
+        }), DispatcherPriority.Input);
+    }
+
+    private void DismissSignalFinishedOverlay()
+    {
+        if (_state != TimerState.SignalFinished)
+            return;
+        lock (SignalPlaybackLock)
+            DisposeSignalPlayback();
+        _signalEqualizerStoryboard?.Stop(SignalFinishedOverlay);
+        SetDelayPhaseMainDimmer(false);
+        SignalFinishedOverlay.Visibility = Visibility.Collapsed;
+        _state = TimerState.Idle;
+        SetDigitsReadOnly(false);
+        SetOptionsEnabled(true);
+        UpdateButtonState();
+        UpdateStartEnabled();
+    }
+
+    private void BtnSignalFinishedOk_OnClick(object sender, RoutedEventArgs e) => DismissSignalFinishedOverlay();
+
     private void UpdateTimerDisplay()
     {
+        if (_state == TimerState.DelayCountdown)
+        {
+            SetMainTimerDigitsZero();
+            return;
+        }
+
         int h = _remainingSeconds / 3600;
         int m = (_remainingSeconds % 3600) / 60;
         int s = _remainingSeconds % 60;
@@ -585,6 +727,13 @@ public partial class MainWindow : Window
         if (h != HoursDigit.Value) HoursDigit.AnimateToValue(h, slideDown: true);
         if (m != MinutesDigit.Value) MinutesDigit.AnimateToValue(m, slideDown: true);
         if (s != SecondsDigit.Value) SecondsDigit.AnimateToValue(s, slideDown: true);
+    }
+
+    private void SetMainTimerDigitsZero()
+    {
+        if (HoursDigit.Value != 0) HoursDigit.AnimateToValue(0, slideDown: true);
+        if (MinutesDigit.Value != 0) MinutesDigit.AnimateToValue(0, slideDown: true);
+        if (SecondsDigit.Value != 0) SecondsDigit.AnimateToValue(0, slideDown: true);
     }
 
     private void SetDigitsReadOnly(bool ro)
@@ -608,103 +757,196 @@ public partial class MainWindow : Window
     }
 
     // ── System commands ─────────────────────────────────────
-
-    private static void ScheduleSystemShutdown(int delaySec)
+    /// <summary>Только мгновенное выключение через Windows; отсчёт до выключения — только в приложении.</summary>
+    private static void InitiateImmediateSystemShutdown()
     {
         try
         {
-            Process.Start(new ProcessStartInfo("shutdown", $"/s /t {delaySec}")
+            Process.Start(new ProcessStartInfo("shutdown", "/s /t 0")
                 { CreateNoWindow = true, UseShellExecute = false });
         }
         catch { }
     }
 
-    private static void AbortSystemShutdown()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo("shutdown", "/a")
-                { CreateNoWindow = true, UseShellExecute = false });
-        }
-        catch { }
-    }
+    private static readonly Uri SignalSoundPackUri =
+        new("pack://application:,,,/Assets/sound-03-minecraft.mp3", UriKind.Absolute);
 
     private static void PlayAlarmSignal()
     {
-        try
+        lock (SignalPlaybackLock)
         {
-            SystemSounds.Exclamation.Play();
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
-            int count = 0;
-            timer.Tick += (_, _) =>
+            try
             {
-                count++;
-                if (count >= 4)
-                {
-                    timer.Stop();
+                DisposeSignalPlayback();
+
+                var sri = Application.GetResourceStream(SignalSoundPackUri);
+                if (sri?.Stream == null)
                     return;
+
+                using (sri.Stream)
+                {
+                    _signalMp3Memory = new MemoryStream();
+                    sri.Stream.CopyTo(_signalMp3Memory);
                 }
-                SystemSounds.Exclamation.Play();
-            };
-            timer.Start();
+
+                _signalMp3Memory.Position = 0;
+                _signalMp3Reader = new Mp3FileReader(_signalMp3Memory);
+
+                var waveOut = new WaveOutEvent();
+                _signalWaveOut = waveOut;
+                waveOut.Init(_signalMp3Reader);
+                waveOut.PlaybackStopped += SignalWaveOut_OnPlaybackStopped;
+                waveOut.Play();
+            }
+            catch
+            {
+                DisposeSignalPlayback();
+            }
         }
-        catch { }
+    }
+
+    private static void SignalWaveOut_OnPlaybackStopped(object? sender, StoppedEventArgs e)
+    {
+        lock (SignalPlaybackLock)
+            DisposeSignalPlayback();
+    }
+
+    private static void DisposeSignalPlayback()
+    {
+        if (_signalWaveOut != null)
+        {
+            try
+            {
+                _signalWaveOut.PlaybackStopped -= SignalWaveOut_OnPlaybackStopped;
+                _signalWaveOut.Stop();
+            }
+            catch { /* ignored */ }
+
+            try { _signalWaveOut.Dispose(); } catch { /* ignored */ }
+            _signalWaveOut = null;
+        }
+
+        try { _signalMp3Reader?.Dispose(); } catch { /* ignored */ }
+        _signalMp3Reader = null;
+        _signalMp3Memory = null;
     }
 
     // ── UI state ────────────────────────────────────────────
 
     private void UpdateButtonState()
     {
-        switch (_state)
+        bool showStop = _state == TimerState.Running || _state == TimerState.DelayCountdown;
+        bool shouldAnimate = _wasShowingStopButton.HasValue && _wasShowingStopButton.Value != showStop;
+
+        void ApplyStartStopLabelAndEnabled()
         {
-            case TimerState.Idle:
-                BtnStartStop.Content = LocalizationService.T("MainWindow.BtnStart");
-                break;
-            case TimerState.Running:
-            case TimerState.DelayCountdown:
-                BtnStartStop.Content = LocalizationService.T("MainWindow.BtnStop");
-                BtnStartStop.IsEnabled = true;
-                break;
+            switch (_state)
+            {
+                case TimerState.Idle:
+                    BtnStartStop.Content = LocalizationService.T("MainWindow.BtnStart");
+                    break;
+                case TimerState.Running:
+                case TimerState.DelayCountdown:
+                    BtnStartStop.Content = LocalizationService.T("MainWindow.BtnStop");
+                    BtnStartStop.IsEnabled = true;
+                    break;
+                case TimerState.SignalFinished:
+                    BtnStartStop.Content = LocalizationService.T("MainWindow.BtnStart");
+                    BtnStartStop.IsEnabled = false;
+                    break;
+            }
+
+            if (_state == TimerState.Idle)
+                UpdateStartEnabled();
         }
 
-        if (_state == TimerState.Idle)
-            UpdateStartEnabled();
+        if (shouldAnimate)
+            PlayStartStopButtonTransitionAnimation(ApplyStartStopLabelAndEnabled);
+        else
+            ApplyStartStopLabelAndEnabled();
+
+        _wasShowingStopButton = showStop;
     }
 
-    private void UpdateStatusText()
+    private void PlayStartStopButtonTransitionAnimation(Action applyNewLabel)
     {
-        if (_state == TimerState.DelayCountdown)
+        BtnStartStop.BeginAnimation(UIElement.OpacityProperty, null);
+        if (BtnStartStop.RenderTransform is ScaleTransform scale)
         {
-            var actionWord = SelectedAction == ActionKind.Shutdown
-                ? LocalizationService.T("MainWindow.StatusDelayShutdown")
-                : LocalizationService.T("MainWindow.StatusDelaySignal");
-            StatusText.Text = LocalizationService.T("MainWindow.StatusDelayFormat", actionWord, _remainingSeconds);
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            scale.ScaleX = 1;
+            scale.ScaleY = 1;
+        }
+
+        BtnStartStop.Opacity = 1;
+
+        if (BtnStartStop.RenderTransform is not ScaleTransform st)
+        {
+            applyNewLabel();
             return;
         }
 
-        StatusText.Text = "";
+        var durIn = TimeSpan.FromMilliseconds(85);
+        var durOut = TimeSpan.FromMilliseconds(165);
+
+        var easeIn = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+        var easeOut = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.38 };
+
+        var shrinkX = new DoubleAnimation(1.0, 0.84, durIn) { EasingFunction = easeIn };
+        var shrinkY = new DoubleAnimation(1.0, 0.88, durIn) { EasingFunction = easeIn };
+        var fadeOut = new DoubleAnimation(1.0, 0.55, durIn) { EasingFunction = easeIn };
+
+        shrinkX.Completed += (_, _) =>
+        {
+            applyNewLabel();
+
+            var growX = new DoubleAnimation(0.84, 1.0, durOut) { EasingFunction = easeOut };
+            var growY = new DoubleAnimation(0.88, 1.0, durOut) { EasingFunction = easeOut };
+            var fadeIn = new DoubleAnimation(0.55, 1.0, durOut) { EasingFunction = easeOut };
+
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, growX);
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, growY);
+            BtnStartStop.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+        };
+
+        st.BeginAnimation(ScaleTransform.ScaleXProperty, shrinkX);
+        st.BeginAnimation(ScaleTransform.ScaleYProperty, shrinkY);
+        BtnStartStop.BeginAnimation(UIElement.OpacityProperty, fadeOut);
     }
 
+    private void UpdateStatusText() => StatusText.Text = "";
+
     // ── Colon blink animation ───────────────────────────────
+    // Один полный цикл (ярко → тускло → ярко) длится ровно 1 с и запускается в том же тике, что и смена секунды
+    // (см. PulseColonForOneSecond в OnCountdownTick / OnDelayTick). Бесконечная анимация не используется — она расходилась по фазе с таймером.
 
     private void StartColonBlink()
     {
-        StopColonBlink();
+        Colon1.BeginAnimation(OpacityProperty, null);
+        Colon2.BeginAnimation(OpacityProperty, null);
 
         var colonBrush = !_actionIsSignal
             ? (Brush)FindResource("Rs.Danger")
             : (Brush)FindResource("Rs.Text.Primary");
         Colon1.Foreground = colonBrush;
         Colon2.Foreground = colonBrush;
+        Colon1.Opacity = 1.0;
+        Colon2.Opacity = 1.0;
+    }
 
-        var anim = new DoubleAnimation(1.0, 0.15, TimeSpan.FromMilliseconds(500))
-        {
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever
-        };
+    private void PulseColonForOneSecond()
+    {
+        Colon1.BeginAnimation(OpacityProperty, null);
+        Colon2.BeginAnimation(OpacityProperty, null);
+        Colon1.Opacity = 1.0;
+        Colon2.Opacity = 1.0;
 
-        Colon1.BeginAnimation(OpacityProperty, anim);
-        Colon2.BeginAnimation(OpacityProperty, anim);
+        var dur = TimeSpan.FromMilliseconds(ColonPulseHalfDurationMs);
+        var a1 = new DoubleAnimation(1.0, 0.15, dur) { AutoReverse = true };
+        var a2 = new DoubleAnimation(1.0, 0.15, dur) { AutoReverse = true };
+        Colon1.BeginAnimation(OpacityProperty, a1);
+        Colon2.BeginAnimation(OpacityProperty, a2);
     }
 
     private void StopColonBlink()
@@ -734,13 +976,74 @@ public partial class MainWindow : Window
             case TimerState.DelayCountdown:
                 StopTimer();
                 break;
+            case TimerState.SignalFinished:
+                break;
         }
+    }
+
+    private void BtnStartStop_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+
+        if (_state == TimerState.SignalFinished)
+            return;
+
+        if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
+            StopTimer();
+
+        HoursDigit.SetValueSilent(0);
+        MinutesDigit.SetValueSilent(0);
+        SecondsDigit.SetValueSilent(0);
+        RecalcRemaining();
+        UpdateStartEnabled();
     }
 
     private void TitleBar_OnMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
-            DragMove();
+            BeginDragMoveWindow();
+    }
+
+    /// <summary>Перетаскивание безрамочного окна с произвольной области: <see cref="DragMove"/> с <see cref="WindowChrome"/> часто не срабатывает.</summary>
+    private void BeginDragMoveWindow()
+    {
+        try
+        {
+            var h = new WindowInteropHelper(this).EnsureHandle();
+            if (h == IntPtr.Zero) return;
+            ReleaseCapture();
+            SendMessage(h, WmNcLButtonDown, (IntPtr)HtCaption, IntPtr.Zero);
+        }
+        catch
+        {
+            // окно может закрываться
+        }
+    }
+
+    private static bool IsDescendantOf(DependencyObject? node, DependencyObject? ancestor)
+    {
+        if (node == null || ancestor == null) return false;
+        for (var o = node; o != null; o = VisualTreeHelper.GetParent(o))
+        {
+            if (ReferenceEquals(o, ancestor)) return true;
+        }
+        return false;
+    }
+
+    private void SignalFinishedOverlay_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (IsDescendantOf(e.OriginalSource as DependencyObject, BtnSignalFinishedOk))
+            return;
+        e.Handled = true;
+        BeginDragMoveWindow();
+    }
+
+    private void DelayPhaseMainDimmerDark_OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        e.Handled = true;
+        BeginDragMoveWindow();
     }
 
     private void TitleBarAbout_OnClick(object sender, RoutedEventArgs e) => About.Show(this);
@@ -1004,13 +1307,16 @@ public partial class MainWindow : Window
     {
         if (App.ShutdownRequested)
         {
-            if (_state == TimerState.DelayCountdown && SelectedAction == ActionKind.Shutdown)
-                AbortSystemShutdown();
             _countdown?.Stop();
             _countdown = null;
+            CloseDelayOverlay();
+            DismissSignalFinishedOverlay();
             base.OnClosing(e);
             return;
         }
+
+        if (_state == TimerState.SignalFinished)
+            DismissSignalFinishedOverlay();
 
         if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
         {
@@ -1037,10 +1343,43 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_state == TimerState.DelayCountdown && SelectedAction == ActionKind.Shutdown)
-            AbortSystemShutdown();
         _countdown?.Stop();
         _countdown = null;
+        CloseDelayOverlay();
         base.OnClosing(e);
     }
+
+    #region TEMP — удалить после проверки окна отсрочки (клавиша Q)
+
+    private void MainWindow_PreviewKeyDown_TempDelayOverlayTest(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Q)
+            return;
+        if (_state == TimerState.SignalFinished)
+            return;
+        e.Handled = true;
+        OpenDelayOverlayTestPreview();
+    }
+
+    /// <summary>Независимое окно для визуальной проверки вёрстки; не трогает таймер.</summary>
+    private void OpenDelayOverlayTestPreview()
+    {
+        var w = new DelayOverlayWindow
+        {
+            Owner = this
+        };
+        w.SetActionMode(_actionIsSignal);
+        w.SetRemainingSeconds(3725); // 1:02:05 — проверка формата с часами
+        w.Closed += (_, _) =>
+        {
+            if (_delayOverlay == null)
+                SetDelayPhaseMainDimmer(false);
+        };
+        w.CancelRequested += (_, _) => w.Close();
+        w.ConfirmNowRequested += (_, _) => w.Close();
+        SetDelayPhaseMainDimmer(true);
+        w.Show();
+    }
+
+    #endregion
 }

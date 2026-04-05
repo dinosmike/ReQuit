@@ -14,7 +14,7 @@
 
         <!-- Unit label (часы / минуты / секунды) -->
         <TextBlock x:Name="UnitLabel" Grid.Row="0"
-                   FontSize="11"
+                   FontSize="10"
                    FontWeight="SemiBold"
                    Foreground="{DynamicResource Rs.Text.Muted}"
                    HorizontalAlignment="Center"
@@ -44,39 +44,93 @@
                 MouseLeave="OnDigitMouseLeave"
                 MouseWheel="OnDigitMouseWheel">
             <Grid>
-                <!-- Current digit -->
-                <TextBlock x:Name="CurrentText"
-                           Text="00"
-                           FontSize="88"
-                           FontWeight="Bold"
-                           FontFamily="Consolas"
-                           Foreground="{DynamicResource Rs.Text.Primary}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           RenderTransformOrigin="0.5,0.5">
-                    <TextBlock.RenderTransform>
-                        <TranslateTransform x:Name="CurrentTransform"/>
-                    </TextBlock.RenderTransform>
-                </TextBlock>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-                <!-- Incoming digit (visible only during animation) -->
-                <TextBlock x:Name="IncomingText"
-                           Text="00"
-                           FontSize="88"
-                           FontWeight="Bold"
-                           FontFamily="Consolas"
-                           Foreground="{DynamicResource Rs.Text.Primary}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Visibility="Collapsed"
-                           RenderTransformOrigin="0.5,0.5">
-                    <TextBlock.RenderTransform>
-                        <TranslateTransform x:Name="IncomingTransform"/>
-                    </TextBlock.RenderTransform>
-                </TextBlock>
+                <!-- Шов flip-clock — ниже по z-order, чем цифры (первым в списке дочерних) -->
+                <Rectangle Grid.Row="0" VerticalAlignment="Center" Height="1"
+                           Fill="#18FFFFFF" IsHitTestVisible="False"
+                           Margin="6,0"/>
+
+                <!-- Пара цифр по центру по горизонтали; по вертикали колонки на всю высоту циферблата — иначе ClipToBounds режет анимацию -->
+                <Grid Grid.Row="0"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Stretch">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Десятки -->
+                    <Grid Grid.Column="0"
+                          VerticalAlignment="Stretch"
+                          ClipToBounds="True">
+                        <TextBlock x:Name="CurrentTensText"
+                                   Text="0"
+                                   FontSize="88"
+                                   FontWeight="Bold"
+                                   FontFamily="Consolas"
+                                   Foreground="{DynamicResource Rs.Text.Primary}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="CurrentTensTransform"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <TextBlock x:Name="IncomingTensText"
+                                   Text="0"
+                                   FontSize="88"
+                                   FontWeight="Bold"
+                                   FontFamily="Consolas"
+                                   Foreground="{DynamicResource Rs.Text.Primary}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="IncomingTensTransform"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </Grid>
+
+                    <!-- Единицы -->
+                    <Grid Grid.Column="1"
+                          VerticalAlignment="Stretch"
+                          ClipToBounds="True">
+                        <TextBlock x:Name="CurrentOnesText"
+                                   Text="0"
+                                   FontSize="88"
+                                   FontWeight="Bold"
+                                   FontFamily="Consolas"
+                                   Foreground="{DynamicResource Rs.Text.Primary}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="CurrentOnesTransform"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <TextBlock x:Name="IncomingOnesText"
+                                   Text="0"
+                                   FontSize="88"
+                                   FontWeight="Bold"
+                                   FontFamily="Consolas"
+                                   Foreground="{DynamicResource Rs.Text.Primary}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="IncomingOnesTransform"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </Grid>
+                </Grid>
 
                 <!-- Top edge shadow for inset depth effect -->
-                <Rectangle VerticalAlignment="Top" Height="32" IsHitTestVisible="False">
+                <Rectangle Grid.Row="0" VerticalAlignment="Top" Height="32" IsHitTestVisible="False">
                     <Rectangle.Fill>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                             <GradientStop Color="#A0141D2B" Offset="0"/>
@@ -86,7 +140,7 @@
                 </Rectangle>
 
                 <!-- Bottom edge shadow for inset depth effect -->
-                <Rectangle VerticalAlignment="Bottom" Height="32" IsHitTestVisible="False">
+                <Rectangle Grid.Row="0" VerticalAlignment="Bottom" Height="32" IsHitTestVisible="False">
                     <Rectangle.Fill>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                             <GradientStop Color="#00141D2B" Offset="0"/>
@@ -94,11 +148,6 @@
                         </LinearGradientBrush>
                     </Rectangle.Fill>
                 </Rectangle>
-
-                <!-- Horizontal slit line (flip-clock hinge) -->
-                <Rectangle VerticalAlignment="Center" Height="1"
-                           Fill="#18FFFFFF" IsHitTestVisible="False"
-                           Margin="6,0"/>
             </Grid>
         </Border>
 
