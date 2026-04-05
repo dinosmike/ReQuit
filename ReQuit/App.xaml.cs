@@ -16,10 +16,17 @@ public partial class App : Application
         base.OnStartup(e);
 
         var settings = SettingsStorage.Load();
-        var lang = string.IsNullOrWhiteSpace(settings.Ui.Language)
-            ? AppLanguageCatalog.ResolveDefaultLanguage()
-            : AppLanguageCatalog.Normalize(settings.Ui.Language);
+        var hadStoredLanguage = !string.IsNullOrWhiteSpace(settings.Ui.Language);
+        var lang = hadStoredLanguage
+            ? AppLanguageCatalog.Normalize(settings.Ui.Language)
+            : AppLanguageCatalog.ResolveDefaultLanguage();
         LocalizationService.Apply(lang);
+
+        if (!hadStoredLanguage)
+        {
+            settings.Ui.Language = lang;
+            SettingsStorage.Save(settings);
+        }
 
         MainWindow = new MainWindow();
         MainWindow.Show();

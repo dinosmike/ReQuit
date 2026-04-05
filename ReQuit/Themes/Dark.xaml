@@ -17,6 +17,10 @@
     <Color x:Key="Rs.Color.OptionCard">#1C2026</Color>
     <!-- Пилюля при наведении только на карточку (серая, не акцентная) -->
     <Color x:Key="Rs.Color.PillMutedFill">#252B33</Color>
+    <!-- Иконки действий (как в ReSwitch: «Получить» и т.п.): Segoe MDL2 Assets -->
+    <Color x:Key="Rs.Color.ProfileActionIcon">#3DD4C3</Color>
+    <SolidColorBrush x:Key="Rs.ProfileAction.IconBrush" Color="{StaticResource Rs.Color.ProfileActionIcon}"/>
+    <net:Double x:Key="Rs.ProfileAction.IconSize">12</net:Double>
 
     <SolidColorBrush x:Key="Rs.Window.Background" Color="{StaticResource Rs.Color.Background}"/>
     <SolidColorBrush x:Key="Rs.Surface" Color="{StaticResource Rs.Color.Surface}"/>
@@ -67,6 +71,14 @@
 
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Primary}"/>
+    </Style>
+
+    <Style x:Key="Rs.TextBlock.ProfileActionIcon" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+        <Setter Property="FontSize" Value="{DynamicResource Rs.ProfileAction.IconSize}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Rs.ProfileAction.IconBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,0,8,0"/>
     </Style>
 
     <Style TargetType="ToolTip">

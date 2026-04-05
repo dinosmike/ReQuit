@@ -34,6 +34,9 @@ public partial class MainWindow : Window
     private bool _trayHideAnimating;
     private bool _trayShowAnimating;
 
+    /// <summary>Пока true — не дублировать оверлей отсрочки из <see cref="ShowFromTray"/> (его сразу создаёт <see cref="ShowDelayOverlay"/>).</summary>
+    private bool _suppressEnsureDelayOverlayAfterShowFromTray;
+
     private const int TrayFlyDurationMs = 400;
     private const double TrayFlyEndScale = 0.14;
 
@@ -88,6 +91,8 @@ public partial class MainWindow : Window
         if (_actionIsSignal)
             _delaySeconds = 0;
 
+        RecalcRemaining();
+
         LocalizationService.LanguageChanged += OnLocalizationLanguageChanged;
         Unloaded += MainWindow_OnUnloaded;
 
@@ -141,13 +146,12 @@ public partial class MainWindow : Window
         }
     }
 
-    internal void ReloadWindowSettingsFromDisk() => ApplyCloseButtonAppearance();
-
     private void PersistTimerSettings()
     {
         var s = SettingsStorage.Load();
         s.Timer.ActionIsSignal = _actionIsSignal;
-        s.Timer.DelaySeconds = _delaySeconds;
+        if (!_actionIsSignal)
+            s.Timer.DelaySeconds = _delaySeconds;
         SettingsStorage.Save(s);
     }
 
@@ -411,8 +415,8 @@ public partial class MainWindow : Window
     {
         _actionIsSignal = false;
         ActionPillText.Text = LocalizationService.T("MainWindow.ActionShutdown");
-        _delaySeconds = 60;
-        DelayPillText.Text = GetDelayLabelText(60);
+        _delaySeconds = SettingsStorage.Load().Timer.DelaySeconds;
+        DelayPillText.Text = GetDelayLabelText(_delaySeconds);
         CancelCloseActionPopup();
         ActionPopup.IsOpen = false;
         ApplyActionOptionCardVisuals();
@@ -524,6 +528,21 @@ public partial class MainWindow : Window
 
     private void ShowDelayOverlay()
     {
+        // Сначала главное окно (в т.ч. из трея), затем оверлей — иначе отдельное окно отсрочки активирует процесс до показа main.
+        _suppressEnsureDelayOverlayAfterShowFromTray = true;
+        try
+        {
+            ShowFromTray();
+            AttachDelayOverlayWindow();
+        }
+        finally
+        {
+            _suppressEnsureDelayOverlayAfterShowFromTray = false;
+        }
+    }
+
+    private void AttachDelayOverlayWindow()
+    {
         CloseDelayOverlay();
         var w = new DelayOverlayWindow();
         w.SetActionMode(_actionIsSignal);
@@ -533,6 +552,23 @@ public partial class MainWindow : Window
         w.Show();
         _delayOverlay = w;
         SetDelayPhaseMainDimmer(true);
+    }
+
+    /// <summary>Если отсрочка шла без оверлея (окно было в фоне), показываем оверлей после ручного открытия окна.</summary>
+    private void EnsureDelayOverlayAttached()
+    {
+        if (_state != TimerState.DelayCountdown || _delayOverlay != null)
+            return;
+        if (!IsVisible)
+            return;
+        AttachDelayOverlayWindow();
+    }
+
+    private void FinishShowFromTrayIfNeeded()
+    {
+        if (_suppressEnsureDelayOverlayAfterShowFromTray)
+            return;
+        EnsureDelayOverlayAttached();
     }
 
     private void CloseDelayOverlay()
@@ -655,6 +691,7 @@ public partial class MainWindow : Window
 
     private void ExecuteAction()
     {
+        ShowFromTray();
         switch (SelectedAction)
         {
             case ActionKind.Shutdown:
@@ -757,12 +794,12 @@ public partial class MainWindow : Window
     }
 
     // ── System commands ─────────────────────────────────────
-    /// <summary>Только мгновенное выключение через Windows; отсчёт до выключения — только в приложении.</summary>
+    /// <summary>Мгновенное выключение через Windows (/f — принудительное закрытие приложений). Отсчёт до выключения — только в приложении.</summary>
     private static void InitiateImmediateSystemShutdown()
     {
         try
         {
-            Process.Start(new ProcessStartInfo("shutdown", "/s /t 0")
+            Process.Start(new ProcessStartInfo("shutdown", "/s /f /t 0")
                 { CreateNoWindow = true, UseShellExecute = false });
         }
         catch { }
@@ -996,6 +1033,7 @@ public partial class MainWindow : Window
         SecondsDigit.SetValueSilent(0);
         RecalcRemaining();
         UpdateStartEnabled();
+        PersistTimerSettings();
     }
 
     private void TitleBar_OnMouseDown(object sender, MouseButtonEventArgs e)
@@ -1063,15 +1101,6 @@ public partial class MainWindow : Window
 
     private void TitleBarMinimizeToTray_OnClick(object sender, RoutedEventArgs e) =>
         HideToTrayCore(SettingsStorage.Load());
-
-    private void TitleBarSettings_OnClick(object sender, RoutedEventArgs e)
-    {
-        SettingsWindow.ShowSingletonOrActivate(dlg =>
-        {
-            dlg.Owner = this;
-            dlg.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        });
-    }
 
     internal void HideToTrayOnStartup() => Hide();
 
@@ -1158,6 +1187,7 @@ public partial class MainWindow : Window
             Topmost = true;
             Topmost = false;
             Activate();
+            FinishShowFromTrayIfNeeded();
             return;
         }
 
@@ -1228,6 +1258,7 @@ public partial class MainWindow : Window
             Topmost = true;
             Topmost = false;
             Activate();
+            FinishShowFromTrayIfNeeded();
         };
 
         sb.Begin(this, true);
@@ -1240,6 +1271,7 @@ public partial class MainWindow : Window
         Topmost = true;
         Topmost = false;
         Activate();
+        FinishShowFromTrayIfNeeded();
     }
 
     private void GetFlyToTrayTarget(double origLeft, double origTop, out double endLeft, out double endTop)
@@ -1305,34 +1337,36 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (App.ShutdownRequested)
+        // Сначала подтверждение при работающем таймере — и при закрытии крестиком, и при «Выход» из трея
+        // (раньше App.ShutdownRequested обрабатывался раньше и пропускал этот шаг).
+        if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
         {
-            _countdown?.Stop();
-            _countdown = null;
-            CloseDelayOverlay();
-            DismissSignalFinishedOverlay();
-            base.OnClosing(e);
-            return;
+            var dlg = new ConfirmCloseWindow { Owner = this };
+            if (!IsVisible)
+            {
+                dlg.Owner = null;
+                dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+            if (dlg.ShowDialog() != true)
+            {
+                e.Cancel = true;
+                App.ShutdownRequested = false;
+                return;
+            }
+
+            StopTimer();
         }
 
         if (_state == TimerState.SignalFinished)
             DismissSignalFinishedOverlay();
 
-        if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
+        if (App.ShutdownRequested)
         {
-            var result = MessageBox.Show(
-                LocalizationService.T("MainWindow.ConfirmCloseActive"),
-                LocalizationService.T("Common.AppTitle"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.No)
-            {
-                e.Cancel = true;
-                return;
-            }
-
-            StopTimer();
+            _countdown?.Stop();
+            _countdown = null;
+            CloseDelayOverlay();
+            base.OnClosing(e);
+            return;
         }
 
         var s = SettingsStorage.Load();

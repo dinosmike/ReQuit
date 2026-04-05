@@ -20,7 +20,7 @@ public sealed class AppSettings
     {
         Ui = new UiAppearanceSettings { Language = null },
         Window = new WindowSettings(),
-        Timer = new TimerSettings(),
+        Timer = new TimerSettings { DelaySeconds = 60 },
         Meta = new SettingsMeta { SettingsFormatVersion = 1 }
     };
 }
@@ -29,7 +29,8 @@ public sealed class TimerSettings
 {
     public bool ActionIsSignal { get; set; }
 
-    public int DelaySeconds { get; set; }
+    /// <summary>Отсрочка для режима выключения. В JSON сохраняется и при режиме «Сигнал», чтобы вернуть при переключении обратно. По умолчанию 1 минута.</summary>
+    public int DelaySeconds { get; set; } = 60;
 }
 
 public sealed class WindowSettings

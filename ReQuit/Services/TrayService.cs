@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
+using ReQuit;
 
 namespace ReQuit.Services;
 
@@ -45,7 +46,6 @@ public sealed class TrayService : IDisposable
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add(LocalizationService.T("Tray.MenuOpen"), null, (_, _) => ShowMain());
-        menu.Items.Add(LocalizationService.T("Tray.MenuSettings"), null, (_, _) => ShowSettings());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(LocalizationService.T("Tray.MenuExit"), null, (_, _) => ExitApp());
         return menu;
@@ -85,27 +85,27 @@ public sealed class TrayService : IDisposable
             mw.ShowFromTray();
     }
 
-    private static void ShowSettings()
-    {
-        SettingsWindow.ShowSingletonOrActivate(dlg =>
-        {
-            if (Application.Current.MainWindow is MainWindow mw)
-            {
-                dlg.Owner = mw;
-                dlg.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            }
-            else
-            {
-                dlg.Owner = null;
-                dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            }
-        });
-    }
-
+    /// <summary>Выход из трея: только с потока WPF, через <see cref="MainWindow.Close"/>, иначе контекстное меню WinForms
+    /// вызывает закрытие с чужого потока — не показывается <see cref="ConfirmCloseWindow"/> при работающем таймере.</summary>
     private static void ExitApp()
     {
+        var app = Application.Current;
+        if (app?.Dispatcher == null)
+            return;
+
+        if (app.Dispatcher.CheckAccess())
+            ExitAppOnUiThread();
+        else
+            app.Dispatcher.Invoke(ExitAppOnUiThread, DispatcherPriority.Send);
+    }
+
+    private static void ExitAppOnUiThread()
+    {
         App.ShutdownRequested = true;
-        Application.Current.Shutdown();
+        if (Application.Current?.MainWindow is MainWindow mw)
+            mw.Close();
+        else
+            Application.Current?.Shutdown();
     }
 
     public void Dispose()

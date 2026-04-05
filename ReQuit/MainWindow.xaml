@@ -214,38 +214,211 @@
             <Setter Property="SnapsToDevicePixels" Value="True"/>
         </Style>
 
-        <!-- Эквалайзер «играет мелодия» на экране «Сигнал сработал» -->
+        <LinearGradientBrush x:Key="SignalEq.BarGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="{StaticResource Rs.Color.Accent}"/>
+            <GradientStop Offset="0.55" Color="{StaticResource Rs.Color.Accent}"/>
+            <GradientStop Offset="1" Color="{StaticResource Rs.Color.AccentDim}"/>
+        </LinearGradientBrush>
+
+        <!-- Эквалайзер «играет мелодия»: кейфреймы + лёгкий пульс всего блока -->
         <Storyboard x:Key="SignalEqualizerStoryboard">
-            <DoubleAnimation Storyboard.TargetName="SignalEqScale0" Storyboard.TargetProperty="ScaleY"
-                             From="0.22" To="1" Duration="0:0:0.38" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0">
+            <DoubleAnimation RepeatBehavior="Forever" Storyboard.TargetName="SignalEqPulse"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="1" To="1.06" Duration="0:0:1.75" AutoReverse="True" BeginTime="0:0:0">
                 <DoubleAnimation.EasingFunction>
                     <SineEase EasingMode="EaseInOut"/>
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="SignalEqScale1" Storyboard.TargetProperty="ScaleY"
-                             From="0.22" To="1" Duration="0:0:0.42" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.07">
+            <DoubleAnimation RepeatBehavior="Forever" Storyboard.TargetName="SignalEqPulse"
+                             Storyboard.TargetProperty="ScaleY"
+                             From="1" To="1.06" Duration="0:0:1.75" AutoReverse="True" BeginTime="0:0:0">
                 <DoubleAnimation.EasingFunction>
                     <SineEase EasingMode="EaseInOut"/>
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="SignalEqScale2" Storyboard.TargetProperty="ScaleY"
-                             From="0.22" To="1" Duration="0:0:0.36" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.14">
+            <DoubleAnimation RepeatBehavior="Forever" Storyboard.TargetName="SignalEqShimmer"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0.35" To="0.85" Duration="0:0:0.65" AutoReverse="True" BeginTime="0:0:0">
                 <DoubleAnimation.EasingFunction>
-                    <SineEase EasingMode="EaseInOut"/>
+                    <QuadraticEase EasingMode="EaseInOut"/>
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="SignalEqScale3" Storyboard.TargetProperty="ScaleY"
-                             From="0.22" To="1" Duration="0:0:0.44" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.05">
-                <DoubleAnimation.EasingFunction>
-                    <SineEase EasingMode="EaseInOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="SignalEqScale4" Storyboard.TargetProperty="ScaleY"
-                             From="0.22" To="1" Duration="0:0:0.40" AutoReverse="True" RepeatBehavior="Forever" BeginTime="0:0:0.11">
-                <DoubleAnimation.EasingFunction>
-                    <SineEase EasingMode="EaseInOut"/>
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
+
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:1.12"
+                                           Storyboard.TargetName="SignalEqScale0" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.2"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.2" Value="0.88">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.42" Value="0.3">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.62" Value="0.95">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.88" Value="0.26">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.12" Value="0.2"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:0.98"
+                                           Storyboard.TargetName="SignalEqScale1" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.06">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.28"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.16" Value="0.72">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <BackEase EasingMode="EaseOut" Amplitude="0.35"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.36" Value="0.38">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseInOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.54" Value="0.98">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <QuarticEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.78" Value="0.34">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.98" Value="0.28"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:1.05"
+                                           Storyboard.TargetName="SignalEqScale2" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.11">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.24"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.18" Value="0.82">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.4" Value="0.45">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseInOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.58" Value="0.92">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.82" Value="0.36">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.05" Value="0.24"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:1.18"
+                                           Storyboard.TargetName="SignalEqScale3" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.02">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.22"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.22" Value="1">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <ElasticEase EasingMode="EaseOut" Oscillations="1" Springiness="3"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.48" Value="0.4">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.68" Value="0.96">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.94" Value="0.3">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.18" Value="0.22"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:1.05"
+                                           Storyboard.TargetName="SignalEqScale4" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.14">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.24"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.2" Value="0.78">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.38" Value="0.42">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseInOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.6" Value="0.9">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.84" Value="0.32">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.05" Value="0.24"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:0.98"
+                                           Storyboard.TargetName="SignalEqScale5" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.08">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.28"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.14" Value="0.68">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.34" Value="0.4">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseInOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.52" Value="0.96">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <QuarticEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.76" Value="0.36">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.98" Value="0.28"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames RepeatBehavior="Forever" Duration="0:0:1.12"
+                                           Storyboard.TargetName="SignalEqScale6" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.04">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="0.2"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.18" Value="0.85">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.4" Value="0.28">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.58" Value="0.92">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.86" Value="0.26">
+                    <EasingDoubleKeyFrame.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </EasingDoubleKeyFrame.EasingFunction>
+                </EasingDoubleKeyFrame>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.12" Value="0.2"/>
+            </DoubleAnimationUsingKeyFrames>
         </Storyboard>
     </Window.Resources>
 
@@ -263,7 +436,6 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -286,24 +458,8 @@
                         </StackPanel>
                     </Border>
 
-                    <Button x:Name="BtnSettings"
-                            Grid.Column="1"
-                            Style="{StaticResource Rs.TitleBar.Button}"
-                            Padding="10,6"
-                            Margin="0,0,8,0"
-                            VerticalAlignment="Center"
-                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                            ToolTip="{DynamicResource Loc_MainWindow_TooltipSettings}"
-                            Click="TitleBarSettings_OnClick">
-                        <Viewbox Width="12" Height="12">
-                            <Path Fill="{DynamicResource Rs.Text.Primary}"
-                                  Stretch="Uniform"
-                                  Data="M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M10,22C9.75,22 9.54,21.82 9.5,21.58L9.15,18.85C8.56,18.65 8,18.36 7.47,18L4.85,19.05C4.65,19.13 4.41,19.05 4.29,18.87L2.29,15.41C2.17,15.23 2.21,15 2.37,14.85L4.57,13.09C4.53,12.73 4.5,12.37 4.5,12C4.5,11.63 4.53,11.27 4.57,10.91L2.37,9.15C2.21,9 2.17,8.77 2.29,8.59L4.29,5.13C4.41,4.95 4.65,4.87 4.85,4.95L7.47,6C8,5.64 8.56,5.35 9.15,5.15L9.5,2.42C9.54,2.18 9.75,2 10,2H14C14.25,2 14.46,2.18 14.5,2.42L14.85,5.15C15.44,5.35 16,5.64 16.53,6L19.15,4.95C19.35,4.87 19.59,4.95 19.71,5.13L21.71,8.59C21.83,8.77 21.79,9 21.63,9.15L19.43,10.91C19.47,11.27 19.5,11.63 19.5,12C19.5,12.37 19.47,12.73 19.43,13.09L21.63,14.85C21.79,15 21.83,15.23 21.71,15.41L19.71,18.87C19.59,19.05 19.35,19.13 19.15,19.05L16.53,18C16,18.36 15.44,18.65 14.85,18.85L14.5,21.58C14.46,21.82 14.25,22 14,22H10Z"/>
-                        </Viewbox>
-                    </Button>
-
                     <Button x:Name="TitleBarLangButton"
-                            Grid.Column="2"
+                            Grid.Column="1"
                             Margin="0,0,8,0"
                             MinHeight="36"
                             Padding="12,6"
@@ -324,7 +480,7 @@
                         </Button.ContextMenu>
                     </Button>
 
-                    <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
                         <Button x:Name="BtnMinimizeToTray"
                                 Style="{StaticResource Rs.TitleBar.Button}"
                                 Content="&#x2B07;"
@@ -412,7 +568,7 @@
                                     MouseEnter="ActionPill_OnMouseEnter"
                                     MouseLeave="ActionPill_OnMouseLeave">
                                 <TextBlock x:Name="ActionPillText"
-                                           Text="Выключение"
+                                           Text="{DynamicResource Loc_MainWindow_ActionShutdown}"
                                            TextAlignment="Center"/>
                             </Button>
                             <Popup x:Name="ActionPopup"
@@ -443,7 +599,7 @@
 
                     <!-- ── Center: Start / Stop ── -->
                     <Button x:Name="BtnStartStop" Grid.Column="1"
-                            Content="Старт"
+                            Content="{DynamicResource Loc_MainWindow_BtnStart}"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             MinWidth="200" Padding="24,12"
@@ -473,7 +629,7 @@
                                     MouseEnter="DelayPill_OnMouseEnter"
                                     MouseLeave="DelayPill_OnMouseLeave">
                                 <TextBlock x:Name="DelayPillText"
-                                           Text="Нет"
+                                           Text="{DynamicResource Loc_MainWindow_Delay1m}"
                                            TextAlignment="Center"/>
                             </Button>
                             <Popup x:Name="DelayPopup"
@@ -543,61 +699,101 @@
             <StackPanel VerticalAlignment="Center"
                         HorizontalAlignment="Center"
                         MaxWidth="520">
-                <!-- Векторный «эквалайзер»: полосы масштабируются от низа (RenderTransformOrigin 0.5,1) -->
-                <Grid Width="108" Height="44"
+                <!-- Эквалайзер: градиент, подсветка, кейфреймы в Storyboard -->
+                <Grid x:Name="SignalEqVisualizer"
+                      Margin="0,0,0,20"
                       HorizontalAlignment="Center"
-                      Margin="0,0,0,20">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
-                            Margin="0,0,4,0"
-                            Background="{DynamicResource Rs.Accent}"
-                            RenderTransformOrigin="0.5,1"
-                            SnapsToDevicePixels="True">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="SignalEqScale0" ScaleX="1" ScaleY="0.35"/>
-                        </Border.RenderTransform>
-                    </Border>
-                    <Border Grid.Column="1" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
-                            Margin="0,0,4,0"
-                            Background="{DynamicResource Rs.Accent}"
-                            RenderTransformOrigin="0.5,1"
-                            SnapsToDevicePixels="True">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="SignalEqScale1" ScaleX="1" ScaleY="0.35"/>
-                        </Border.RenderTransform>
-                    </Border>
-                    <Border Grid.Column="2" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
-                            Margin="0,0,4,0"
-                            Background="{DynamicResource Rs.Accent}"
-                            RenderTransformOrigin="0.5,1"
-                            SnapsToDevicePixels="True">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="SignalEqScale2" ScaleX="1" ScaleY="0.35"/>
-                        </Border.RenderTransform>
-                    </Border>
-                    <Border Grid.Column="3" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
-                            Margin="0,0,4,0"
-                            Background="{DynamicResource Rs.Accent}"
-                            RenderTransformOrigin="0.5,1"
-                            SnapsToDevicePixels="True">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="SignalEqScale3" ScaleX="1" ScaleY="0.35"/>
-                        </Border.RenderTransform>
-                    </Border>
-                    <Border Grid.Column="4" Width="12" Height="40" CornerRadius="3" VerticalAlignment="Bottom"
-                            Background="{DynamicResource Rs.Accent}"
-                            RenderTransformOrigin="0.5,1"
-                            SnapsToDevicePixels="True">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="SignalEqScale4" ScaleX="1" ScaleY="0.35"/>
-                        </Border.RenderTransform>
-                    </Border>
+                      RenderTransformOrigin="0.5,0.62"
+                      SnapsToDevicePixels="True">
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="SignalEqPulse" ScaleX="1" ScaleY="1"/>
+                    </Grid.RenderTransform>
+                        <Ellipse x:Name="SignalEqShimmer"
+                                 Width="178" Height="42"
+                                 VerticalAlignment="Bottom"
+                                 Margin="0,0,0,2"
+                                 IsHitTestVisible="False"
+                                 Opacity="0.52">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush GradientOrigin="0.5,1" Center="0.5,1" RadiusX="0.62" RadiusY="0.92">
+                                    <GradientStop Offset="0.08" Color="#663DD4C3"/>
+                                    <GradientStop Offset="1" Color="#00000000"/>
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Grid Width="176" Height="50" VerticalAlignment="Bottom">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="10" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Margin="0,0,3,0"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale0" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                            <Border Grid.Column="1" Width="10" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Margin="0,0,3,0"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale1" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                            <Border Grid.Column="2" Width="11" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Margin="0,0,3,0"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale2" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                            <Border Grid.Column="3" Width="12" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Margin="0,0,3,0"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale3" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                            <Border Grid.Column="4" Width="11" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Margin="0,0,3,0"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale4" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                            <Border Grid.Column="5" Width="10" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Margin="0,0,3,0"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale5" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                            <Border Grid.Column="6" Width="10" Height="46" CornerRadius="4" VerticalAlignment="Bottom"
+                                    Background="{StaticResource SignalEq.BarGradient}"
+                                    RenderTransformOrigin="0.5,1"
+                                    SnapsToDevicePixels="True">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="SignalEqScale6" ScaleX="1" ScaleY="0.32"/>
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
                 </Grid>
                 <TextBlock Text="{DynamicResource Loc_MainWindow_SignalFinishedMessage}"
                            FontSize="22"

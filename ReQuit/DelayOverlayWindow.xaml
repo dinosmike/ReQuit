@@ -21,7 +21,7 @@
                     MaxWidth="720"
                     Margin="40">
             <TextBlock x:Name="TitleBlock"
-                       Text="ВНИМАНИЕ"
+                       Text="{DynamicResource Loc_DelayOverlay_Title}"
                        FontSize="44"
                        FontWeight="Bold"
                        Foreground="{DynamicResource Rs.Text.Primary}"
