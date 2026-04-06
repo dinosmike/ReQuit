@@ -22,6 +22,15 @@
   <ItemGroup>
     <Resource Include="app.ico" />
     <Resource Include="Assets\sound-03-minecraft.mp3" />
+    <Resource Include="Fonts\consola.ttf" />
+    <Resource Include="Fonts\consolab.ttf" />
+    <Resource Include="Fonts\segoeui.ttf" />
+    <Resource Include="Fonts\segoeuib.ttf" />
+    <Resource Include="Fonts\segoeuii.ttf" />
+    <Resource Include="Fonts\segoeuil.ttf" />
+    <Resource Include="Fonts\segoeuisl.ttf" />
+    <Resource Include="Fonts\segoeuiz.ttf" />
+    <Resource Include="Fonts\segmdl2.ttf" />
     <EmbeddedResource Include="Localization\*.json" />
   </ItemGroup>
 

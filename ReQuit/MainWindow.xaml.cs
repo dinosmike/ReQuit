@@ -105,6 +105,8 @@ public partial class MainWindow : Window
             ApplyDelayOptionCardVisuals();
         };
 
+        PreviewMouseRightButtonDown += MainWindow_PreviewMouseRightButtonDown;
+
         // TEMP: превью окна отсрочки по клавише Q — удалить вместе с регионом TEMP ниже
         PreviewKeyDown += MainWindow_PreviewKeyDown_TempDelayOverlayTest;
     }
@@ -120,6 +122,8 @@ public partial class MainWindow : Window
         HoursDigit.UnitText = LocalizationService.T("Timer.Hours");
         MinutesDigit.UnitText = LocalizationService.T("Timer.Minutes");
         SecondsDigit.UnitText = LocalizationService.T("Timer.Seconds");
+        ExactTimeHours.UnitText = LocalizationService.T("Timer.Hours");
+        ExactTimeMinutes.UnitText = LocalizationService.T("Timer.Minutes");
 
         ActionPillText.Text = _actionIsSignal
             ? LocalizationService.T("MainWindow.ActionSignal")
@@ -131,6 +135,7 @@ public partial class MainWindow : Window
         UpdateButtonState();
         UpdateStatusText();
         ApplyActionVisualTheme();
+        ApplyExactTimeDigitTheme();
         UpdateDelayOptionCardVisibility();
     }
 
@@ -173,6 +178,13 @@ public partial class MainWindow : Window
             StartColonBlink();
         else
             StopColonBlink();
+    }
+
+    private void ApplyExactTimeDigitTheme()
+    {
+        bool shutdown = !_actionIsSignal;
+        ExactTimeHours.ShutdownAction = shutdown;
+        ExactTimeMinutes.ShutdownAction = shutdown;
     }
 
     private void ApplyCloseButtonAppearance()
@@ -758,6 +770,142 @@ public partial class MainWindow : Window
     }
 
     private void BtnSignalFinishedOk_OnClick(object sender, RoutedEventArgs e) => DismissSignalFinishedOverlay();
+
+    private void MainWindow_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Right) return;
+        if (_state != TimerState.Idle) return;
+        if (ExactTimeOverlay.Visibility == Visibility.Visible) return;
+
+        // ПКМ по любой кнопке — не показывать «точное время» (на «Старт» — сброс, как раньше; на неактивной «Старт» — тишина)
+        if (ShouldSuppressExactTimeContextMenu(e))
+            return;
+
+        OpenExactTimeContextMenu();
+        e.Handled = true;
+    }
+
+    private bool ShouldSuppressExactTimeContextMenu(MouseButtonEventArgs e)
+    {
+        if (IsDescendantOfButton(e.OriginalSource as DependencyObject))
+            return true;
+        // Отключённая кнопка не в цепочке hit-test — клик уходит под неё, но координаты всё ещё над «Старт»
+        if (IsMouseOverElement(BtnStartStop, e))
+            return true;
+        return false;
+    }
+
+    private static bool IsDescendantOfButton(DependencyObject? source)
+    {
+        for (var o = source; o != null; o = VisualTreeHelper.GetParent(o))
+        {
+            if (o is WpfButton)
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsMouseOverElement(FrameworkElement el, MouseButtonEventArgs e)
+    {
+        if (el == null || !el.IsVisible)
+            return false;
+        var w = el.ActualWidth;
+        var h = el.ActualHeight;
+        if (w <= 0 || h <= 0)
+            return false;
+        var pt = e.GetPosition(el);
+        return pt.X >= 0 && pt.Y >= 0 && pt.X <= w && pt.Y <= h;
+    }
+
+    private void OpenExactTimeContextMenu()
+    {
+        var cm = new ContextMenu();
+        var item = new MenuItem();
+        var header = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        var clockIcon = new TextBlock
+        {
+            Text = "\uE823",
+            FontFamily = Application.Current.TryFindResource("Rs.Font.Mdl2") as System.Windows.Media.FontFamily
+                         ?? new System.Windows.Media.FontFamily("pack://application:,,,/Fonts/segmdl2.ttf#Segoe MDL2 Assets"),
+            FontSize = 16,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+        clockIcon.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
+        var label = new TextBlock
+        {
+            Text = LocalizationService.T("MainWindow.ExactTimeMenu"),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
+        header.Children.Add(clockIcon);
+        header.Children.Add(label);
+        item.Header = header;
+        item.Click += (_, _) => OpenExactTimeDialog();
+        cm.Items.Add(item);
+        cm.PlacementTarget = this;
+        cm.Placement = PlacementMode.MousePoint;
+        cm.IsOpen = true;
+    }
+
+    private void OpenExactTimeDialog()
+    {
+        var n = DateTime.Now;
+        ExactTimeHours.SetValueSilent(n.Hour);
+        ExactTimeMinutes.SetValueSilent(n.Minute);
+        ApplyExactTimeDigitTheme();
+        ExactTimeOverlay.Visibility = Visibility.Visible;
+        SetDelayPhaseMainDimmer(true, stealFocusWithDimmer: false);
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try { BtnExactTimeStart.Focus(); }
+            catch { /* ignored */ }
+        }), DispatcherPriority.Input);
+    }
+
+    private void CloseExactTimeDialog()
+    {
+        if (ExactTimeOverlay.Visibility != Visibility.Visible)
+            return;
+        ExactTimeOverlay.Visibility = Visibility.Collapsed;
+        SetDelayPhaseMainDimmer(false);
+    }
+
+    private void BtnExactTimeClose_OnClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        CloseExactTimeDialog();
+    }
+
+    private void BtnExactTimeStart_OnClick(object sender, RoutedEventArgs e)
+    {
+        int h = ExactTimeHours.Value;
+        int m = ExactTimeMinutes.Value;
+        var now = DateTime.Now;
+        var target = new DateTime(now.Year, now.Month, now.Day, h, m, 0, DateTimeKind.Local);
+        if (target <= now)
+            target = target.AddDays(1);
+
+        var secs = (int)(target - now).TotalSeconds;
+        if (secs <= 0)
+            return;
+
+        CloseExactTimeDialog();
+
+        HoursDigit.SetValueSilent(secs / 3600);
+        MinutesDigit.SetValueSilent((secs % 3600) / 60);
+        SecondsDigit.SetValueSilent(secs % 60);
+        StartTimer();
+    }
+
+    private void ExactTimeOverlay_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (IsDescendantOf(e.OriginalSource as DependencyObject, ExactTimeDialogRoot))
+            return;
+        e.Handled = true;
+        BeginDragMoveWindow();
+    }
 
     private void SyncTrayCountdownIcon()
     {
@@ -1357,6 +1505,9 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (ExactTimeOverlay.Visibility == Visibility.Visible)
+            CloseExactTimeDialog();
+
         // Сначала подтверждение при работающем таймере — и при закрытии крестиком, и при «Выход» из трея
         // (раньше App.ShutdownRequested обрабатывался раньше и пропускал этот шаг).
         if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
@@ -1407,6 +1558,13 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewKeyDown_TempDelayOverlayTest(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (ExactTimeOverlay.Visibility == Visibility.Visible && e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CloseExactTimeDialog();
+            return;
+        }
+
         if (e.Key != Key.Q)
             return;
         if (_state == TimerState.SignalFinished)

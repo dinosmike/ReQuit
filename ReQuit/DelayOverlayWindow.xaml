@@ -41,7 +41,7 @@
                        Foreground="{DynamicResource Rs.Text.Primary}"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
-                       FontFamily="Segoe UI"/>
+                       FontFamily="{StaticResource Rs.Font.Ui}"/>
             <StackPanel Orientation="Vertical"
                         HorizontalAlignment="Center"
                         Margin="0,36,0,0">

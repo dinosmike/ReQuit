@@ -4,6 +4,10 @@
                     xmlns:sys="clr-namespace:System.Windows;assembly=PresentationFramework"
                     xmlns:net="clr-namespace:System;assembly=System.Runtime">
 
+    <!-- Встроенные TTF; здесь же, чтобы StaticResource в стилях/шаблонах находил ключи -->
+    <FontFamily x:Key="Rs.Font.Ui">pack://application:,,,/Fonts/#Segoe UI</FontFamily>
+    <FontFamily x:Key="Rs.Font.Mdl2">pack://application:,,,/Fonts/segmdl2.ttf#Segoe MDL2 Assets</FontFamily>
+
     <Color x:Key="Rs.Color.Background">#0D1117</Color>
     <Color x:Key="Rs.Color.Surface">#161B22</Color>
     <Color x:Key="Rs.Color.Border">#30363D</Color>
@@ -17,7 +21,7 @@
     <Color x:Key="Rs.Color.OptionCard">#1C2026</Color>
     <!-- Пилюля при наведении только на карточку (серая, не акцентная) -->
     <Color x:Key="Rs.Color.PillMutedFill">#252B33</Color>
-    <!-- Иконки действий (как в ReSwitch: «Получить» и т.п.): Segoe MDL2 Assets -->
+    <!-- Иконки действий: Segoe MDL2 Assets из Fonts/segmdl2.ttf -->
     <Color x:Key="Rs.Color.ProfileActionIcon">#3DD4C3</Color>
     <SolidColorBrush x:Key="Rs.ProfileAction.IconBrush" Color="{StaticResource Rs.Color.ProfileActionIcon}"/>
     <net:Double x:Key="Rs.ProfileAction.IconSize">12</net:Double>
@@ -65,7 +69,7 @@
     <Style TargetType="Window">
         <Setter Property="Background" Value="{DynamicResource Rs.Window.Background}"/>
         <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Primary}"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="{StaticResource Rs.Font.Ui}"/>
         <Setter Property="FontSize" Value="13"/>
     </Style>
 
@@ -74,7 +78,7 @@
     </Style>
 
     <Style x:Key="Rs.TextBlock.ProfileActionIcon" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+        <Setter Property="FontFamily" Value="{StaticResource Rs.Font.Mdl2}"/>
         <Setter Property="FontSize" Value="{DynamicResource Rs.ProfileAction.IconSize}"/>
         <Setter Property="Foreground" Value="{DynamicResource Rs.ProfileAction.IconBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
@@ -370,7 +374,7 @@
         <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Primary}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FontSize" Value="16"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="{StaticResource Rs.Font.Ui}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
         <Setter Property="Template">
@@ -414,6 +418,31 @@
         </Setter>
     </Style>
 
+    <!-- Крестик: красная подложка при hover/press — круг (размер кнопки 36×36, CornerRadius 18). -->
+    <Style x:Key="Rs.TitleBar.Close.Round" TargetType="Button" BasedOn="{StaticResource Rs.TitleBar.Button}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="18">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Rs.TitleBar.CloseHoverBackground}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Rs.TitleBar.CloseHoverForeground}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Rs.TitleBar.ClosePressedBackground}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Rs.TitleBar.CloseHoverForeground}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Rs.TitleBar.AboutInfo" TargetType="Button">
         <Setter Property="Width" Value="12"/>
         <Setter Property="Height" Value="12"/>
@@ -433,7 +462,7 @@
                         <Viewbox Width="12" Height="12" Stretch="Uniform">
                             <TextBlock HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
-                                       FontFamily="Segoe MDL2 Assets"
+                                       FontFamily="{StaticResource Rs.Font.Mdl2}"
                                        Text="&#xE946;"
                                        FontSize="14"
                                        Foreground="{TemplateBinding Foreground}"/>
