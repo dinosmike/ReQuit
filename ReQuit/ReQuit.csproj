@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <Resource Include="app.ico" />
+    <Resource Include="Assets\action-shutdown.png" />
+    <Resource Include="Assets\action-signal.png" />
     <Resource Include="Assets\sound-03-minecraft.mp3" />
     <Resource Include="Fonts\consola.ttf" />
     <Resource Include="Fonts\consolab.ttf" />

@@ -154,9 +154,7 @@ public partial class MainWindow : Window
         ExactTimeHours.UnitText = LocalizationService.T("Timer.Hours");
         ExactTimeMinutes.UnitText = LocalizationService.T("Timer.Minutes");
 
-        ActionPillText.Text = _actionIsSignal
-            ? LocalizationService.T("MainWindow.ActionSignal")
-            : LocalizationService.T("MainWindow.ActionShutdown");
+        SyncActionPillFromState();
 
         DelayPillText.Text = GetDelayLabelText(_delaySeconds);
         UpdateLangButtonLabel();
@@ -1009,10 +1007,19 @@ public partial class MainWindow : Window
 
     private void DelayPopupSurface_OnMouseLeave(object sender, MouseEventArgs e) => ScheduleCloseDelayPopup();
 
+    private void SyncActionPillFromState()
+    {
+        ActionPillText.Text = _actionIsSignal
+            ? LocalizationService.T("MainWindow.ActionSignal")
+            : LocalizationService.T("MainWindow.ActionShutdown");
+        ActionPillIconShutdown.Visibility = _actionIsSignal ? Visibility.Collapsed : Visibility.Visible;
+        ActionPillIconSignal.Visibility = _actionIsSignal ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void ActionPickShutdown_OnClick(object sender, RoutedEventArgs e)
     {
         _actionIsSignal = false;
-        ActionPillText.Text = LocalizationService.T("MainWindow.ActionShutdown");
+        SyncActionPillFromState();
         _delaySeconds = SettingsStorage.Load().Timer.DelaySeconds;
         DelayPillText.Text = GetDelayLabelText(_delaySeconds);
         CancelCloseActionPopup();
@@ -1027,7 +1034,7 @@ public partial class MainWindow : Window
     private void ActionPickSignal_OnClick(object sender, RoutedEventArgs e)
     {
         _actionIsSignal = true;
-        ActionPillText.Text = LocalizationService.T("MainWindow.ActionSignal");
+        SyncActionPillFromState();
         _delaySeconds = 0;
         DelayPillText.Text = GetDelayLabelText(0);
         CancelCloseActionPopup();

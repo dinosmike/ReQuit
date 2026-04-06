@@ -750,9 +750,25 @@
                                     Style="{StaticResource Rs.PillTriggerPlain}"
                                     MouseEnter="ActionPill_OnMouseEnter"
                                     MouseLeave="ActionPill_OnMouseLeave">
-                                <TextBlock x:Name="ActionPillText"
-                                           Text="{DynamicResource Loc_MainWindow_ActionShutdown}"
-                                           TextAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="12" Height="12" Margin="0,0,5,0" VerticalAlignment="Center">
+                                        <Grid Width="12" Height="12">
+                                            <Image x:Name="ActionPillIconShutdown"
+                                                   Source="pack://application:,,,/Assets/action-shutdown.png"
+                                                   Stretch="Uniform"
+                                                   IsHitTestVisible="False"/>
+                                            <Image x:Name="ActionPillIconSignal"
+                                                   Source="pack://application:,,,/Assets/action-signal.png"
+                                                   Stretch="Uniform"
+                                                   Visibility="Collapsed"
+                                                   IsHitTestVisible="False"/>
+                                        </Grid>
+                                    </Viewbox>
+                                    <TextBlock x:Name="ActionPillText"
+                                               Text="{DynamicResource Loc_MainWindow_ActionShutdown}"
+                                               TextAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
                             </Button>
                             <Popup x:Name="ActionPopup"
                                    PlacementTarget="{Binding ElementName=ActionOptionCard}"
@@ -768,12 +784,30 @@
                                         MouseLeave="ActionPopupSurface_OnMouseLeave">
                                     <StackPanel>
                                         <Button Style="{StaticResource Rs.PillMenuItem}"
-                                                Content="{DynamicResource Loc_MainWindow_ActionShutdown}"
-                                                Click="ActionPickShutdown_OnClick"/>
+                                                Click="ActionPickShutdown_OnClick">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="12" Height="12" Margin="0,0,6,0"
+                                                       VerticalAlignment="Center"
+                                                       Source="pack://application:,,,/Assets/action-shutdown.png"
+                                                       Stretch="Uniform"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                <TextBlock Text="{DynamicResource Loc_MainWindow_ActionShutdown}"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
                                         <Button Margin="0"
                                                 Style="{StaticResource Rs.PillMenuItem}"
-                                                Content="{DynamicResource Loc_MainWindow_ActionSignal}"
-                                                Click="ActionPickSignal_OnClick"/>
+                                                Click="ActionPickSignal_OnClick">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="12" Height="12" Margin="0,0,6,0"
+                                                       VerticalAlignment="Center"
+                                                       Source="pack://application:,,,/Assets/action-signal.png"
+                                                       Stretch="Uniform"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                <TextBlock Text="{DynamicResource Loc_MainWindow_ActionSignal}"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
                                 </Border>
                             </Popup>

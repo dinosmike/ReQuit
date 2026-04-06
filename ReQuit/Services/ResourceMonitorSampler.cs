@@ -18,8 +18,8 @@ public readonly record struct ResourceSnapshot(
     IReadOnlyList<NetInterfaceSample> NetSamples);
 
 /// <summary>
-/// CPU (GetSystemTimes), GPU (как в диспетчере задач: WMI-адаптеры + «GPU Engine», при необходимости WMI GPUEngine),
-/// сеть по интерфейсам.
+/// CPU: счётчик <c>\Processor(_Total)\% Processor Time</c> (как в диспетчере задач для суммарной загрузки), иначе GetSystemTimes.
+/// GPU: WMI + «GPU Engine»; сеть по интерфейсам.
 /// </summary>
 public sealed class ResourceMonitorSampler : IDisposable
 {
@@ -47,6 +47,9 @@ public sealed class ResourceMonitorSampler : IDisposable
     private ulong _prevUser;
     private bool _cpuPrimed;
 
+    /// <summary>Совпадает с источником данных диспетчера задач для общей загрузки CPU (не отдельный процесс).</summary>
+    private PerformanceCounter? _cpuTotalCounter;
+
     private readonly List<GpuAdapterCounters> _gpuAdapters = new();
 
     private readonly Dictionary<string, long> _netBytesById = new(StringComparer.Ordinal);
@@ -72,7 +75,30 @@ public sealed class ResourceMonitorSampler : IDisposable
 
     public ResourceMonitorSampler()
     {
+        TryBuildCpuTotalPerformanceCounter();
         BuildGpuCounters();
+    }
+
+    private void TryBuildCpuTotalPerformanceCounter()
+    {
+        try
+        {
+            if (!PerformanceCounterCategory.Exists("Processor"))
+                return;
+
+            var cat = new PerformanceCounterCategory("Processor");
+            if (!cat.InstanceExists("_Total"))
+                return;
+
+            _cpuTotalCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total", true);
+            _ = _cpuTotalCounter.NextValue();
+            _ = _cpuTotalCounter.NextValue();
+        }
+        catch
+        {
+            _cpuTotalCounter?.Dispose();
+            _cpuTotalCounter = null;
+        }
     }
 
     /// <summary>Сетевые интерфейсы для списка (как в диспетчере задач: активные, не loopback).</summary>
@@ -497,6 +523,24 @@ public sealed class ResourceMonitorSampler : IDisposable
 
     private float ReadCpuPercent()
     {
+        if (_cpuTotalCounter != null)
+        {
+            try
+            {
+                var v = _cpuTotalCounter.NextValue();
+                return (float)Math.Clamp(v, 0f, 100f);
+            }
+            catch
+            {
+                // ignored — fallback ниже
+            }
+        }
+
+        return ReadCpuPercentFromSystemTimes();
+    }
+
+    private float ReadCpuPercentFromSystemTimes()
+    {
         if (!GetSystemTimes(out var idleFt, out var kernelFt, out var userFt))
             return 0f;
 
@@ -543,6 +587,17 @@ public sealed class ResourceMonitorSampler : IDisposable
             if (_disposed)
                 return;
             _disposed = true;
+
+            try
+            {
+                _cpuTotalCounter?.Dispose();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            _cpuTotalCounter = null;
 
             foreach (var ad in _gpuAdapters)
             {
