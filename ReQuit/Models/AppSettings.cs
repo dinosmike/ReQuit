@@ -31,6 +31,15 @@ public sealed class TimerSettings
 
     /// <summary>Отсрочка для режима выключения. В JSON сохраняется и при режиме «Сигнал», чтобы вернуть при переключении обратно. По умолчанию 1 минута.</summary>
     public int DelaySeconds { get; set; } = 60;
+
+    /// <summary>Устар.: 0 — CPU, 1 — GPU, 2 — сеть. Используется только если <see cref="ResourceTriggerKey"/> пуст.</summary>
+    public int ResourceConditionKind { get; set; }
+
+    /// <summary>Ключ условия: <c>cpu</c>, <c>internet</c>, <c>gpu:N</c> (N — порядковый номер GPU, как в DXGI / счётчиках phys_N).</summary>
+    public string? ResourceTriggerKey { get; set; }
+
+    /// <summary>Порог в процентах (0–100): срабатывание при падении нагрузки выбранного ресурса строго ниже этого значения.</summary>
+    public int ResourceThresholdPercent { get; set; } = 10;
 }
 
 public sealed class WindowSettings

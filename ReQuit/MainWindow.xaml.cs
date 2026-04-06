@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -21,7 +22,7 @@ namespace ReQuit;
 
 public partial class MainWindow : Window
 {
-    private enum TimerState { Idle, Running, DelayCountdown, SignalFinished }
+    private enum TimerState { Idle, Running, DelayCountdown, ResourceWaiting, SignalFinished }
     private enum ActionKind { Shutdown, Signal }
 
     private TimerState _state = TimerState.Idle;
@@ -77,9 +78,33 @@ public partial class MainWindow : Window
 
     private Storyboard? _signalEqualizerStoryboard;
 
+    private ResourceMonitorSampler? _resourceSampler;
+    private DispatcherTimer? _resourcePollTimer;
+    private bool _suppressResourceComboEvents;
+    private bool _suppressResourceThresholdEvents;
+    private string _resourceWatchKey = ResourceTriggerKeys.Cpu;
+    private int _resourceThresholdPercent = 10;
+    private int _resourceWatchH;
+    private int _resourceWatchM;
+    private int _resourceWatchS;
+    private float _prevResourceValueForEdge;
+    private bool _resourceEdgePrimed;
+
+    private const int ResourceSparkMaxPoints = 56;
+    private const double ResourceSparkCanvasW = 276;
+    private const double ResourceSparkCanvasH = 80;
+    private readonly List<float> _resourceSparkSamples = new();
+    private Storyboard? _resourceSparkScanStoryboard;
+    private Storyboard? _resourceSparkPulseStoryboard;
+
+    /// <summary>Опрос ресурсов не должен выполняться в UI-потоке — иначе подвисания каждые 500 мс.</summary>
+    private bool _resourcePollBusy;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        ResourceMonitorOverlay.IsVisibleChanged += ResourceMonitorOverlay_OnIsVisibleChanged;
 
         HoursDigit.ValueChanged += OnAnyDigitChanged;
         MinutesDigit.ValueChanged += OnAnyDigitChanged;
@@ -90,6 +115,9 @@ public partial class MainWindow : Window
         _delaySeconds = stored.DelaySeconds;
         if (_actionIsSignal)
             _delaySeconds = 0;
+
+        _resourceThresholdPercent = Math.Clamp(stored.ResourceThresholdPercent, 0, 100);
+        _resourceWatchKey = MigrateResourceTriggerKey(stored);
 
         RecalcRemaining();
 
@@ -103,6 +131,7 @@ public partial class MainWindow : Window
             ApplyActionOptionCardVisuals();
             UpdateDelayOptionCardVisibility();
             ApplyDelayOptionCardVisuals();
+            InitResourceMonitorCombos();
         };
 
         PreviewMouseRightButtonDown += MainWindow_PreviewMouseRightButtonDown;
@@ -137,6 +166,7 @@ public partial class MainWindow : Window
         ApplyActionVisualTheme();
         ApplyExactTimeDigitTheme();
         UpdateDelayOptionCardVisibility();
+        InitResourceMonitorCombos();
     }
 
     private void UpdateDelayOptionCardVisibility()
@@ -161,7 +191,547 @@ public partial class MainWindow : Window
         s.Timer.ActionIsSignal = _actionIsSignal;
         if (!_actionIsSignal)
             s.Timer.DelaySeconds = _delaySeconds;
+        s.Timer.ResourceTriggerKey = _resourceWatchKey;
+        s.Timer.ResourceConditionKind = LegacyResourceConditionKind(_resourceWatchKey);
+        s.Timer.ResourceThresholdPercent = _resourceThresholdPercent;
         SettingsStorage.Save(s);
+    }
+
+    private static string MigrateResourceTriggerKey(TimerSettings t)
+    {
+        if (!string.IsNullOrWhiteSpace(t.ResourceTriggerKey))
+            return NormalizeResourceTriggerKey(t.ResourceTriggerKey.Trim());
+        return t.ResourceConditionKind switch
+        {
+            1 => ResourceTriggerKeys.Gpu(0),
+            2 => ResourceTriggerKeys.Internet,
+            _ => ResourceTriggerKeys.Cpu
+        };
+    }
+
+    private static string NormalizeResourceTriggerKey(string key)
+    {
+        if (string.Equals(key, ResourceTriggerKeys.Cpu, StringComparison.OrdinalIgnoreCase))
+            return ResourceTriggerKeys.Cpu;
+        if (string.Equals(key, ResourceTriggerKeys.Internet, StringComparison.OrdinalIgnoreCase))
+            return ResourceTriggerKeys.Internet;
+        if (key.StartsWith("gpu:", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan(4), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var slot))
+        {
+            return ResourceTriggerKeys.Gpu(slot);
+        }
+
+        if (key.StartsWith("net:", StringComparison.OrdinalIgnoreCase) && key.Length > 4)
+        {
+            var requestedId = key.Substring(4);
+            foreach (var (id, _) in ResourceMonitorSampler.DiscoverNetworkInterfaces())
+            {
+                if (string.Equals(id, requestedId, StringComparison.OrdinalIgnoreCase))
+                    return ResourceTriggerKeys.NetInterface(id);
+            }
+
+            return ResourceTriggerKeys.NetInterface(requestedId);
+        }
+
+        return ResourceTriggerKeys.Cpu;
+    }
+
+    private static int LegacyResourceConditionKind(string key)
+    {
+        if (key == ResourceTriggerKeys.Cpu)
+            return 0;
+        if (key.StartsWith("gpu:", StringComparison.Ordinal))
+            return 1;
+        if (key == ResourceTriggerKeys.Internet || key.StartsWith("net:", StringComparison.Ordinal))
+            return 2;
+        return 0;
+    }
+
+    private void InitResourceMonitorCombos()
+    {
+        _suppressResourceComboEvents = true;
+        try
+        {
+            ResourceConditionIfText.Text = LocalizationService.T("MainWindow.ResourceConditionIf");
+            ResourceConditionDropsText.Text = LocalizationService.T("MainWindow.ResourceConditionDropsTo");
+
+            SyncResourceThresholdTextFromValue();
+
+            ResourceKindCombo.Items.Clear();
+            ResourceKindCombo.Items.Add(new ComboBoxItem
+                { Content = LocalizationService.T("MainWindow.ResourceCpu"), Tag = ResourceTriggerKeys.Cpu });
+            ResourceKindCombo.Items.Add(new ComboBoxItem
+                { Content = LocalizationService.T("MainWindow.ResourceInternet"), Tag = ResourceTriggerKeys.Internet });
+
+            foreach (var ad in ResourceMonitorSampler.DiscoverGpuAdapters())
+            {
+                ResourceKindCombo.Items.Add(new ComboBoxItem
+                    { Content = ad.DisplayLabel, Tag = ResourceTriggerKeys.Gpu(ad.SlotIndex) });
+            }
+
+            foreach (var (id, label) in ResourceMonitorSampler.DiscoverNetworkInterfaces())
+            {
+                ResourceKindCombo.Items.Add(new ComboBoxItem
+                    { Content = label, Tag = ResourceTriggerKeys.NetInterface(id) });
+            }
+
+            SelectResourceByTriggerKey(_resourceWatchKey);
+        }
+        finally
+        {
+            _suppressResourceComboEvents = false;
+        }
+    }
+
+    private void SyncResourceThresholdTextFromValue()
+    {
+        _suppressResourceThresholdEvents = true;
+        try
+        {
+            ResourceThresholdTextBox.Text = _resourceThresholdPercent.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        }
+        finally
+        {
+            _suppressResourceThresholdEvents = false;
+        }
+    }
+
+    private static int ParseResourceThresholdText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return 10;
+        if (!int.TryParse(text.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out var v))
+            return 10;
+        return Math.Clamp(v, 0, 100);
+    }
+
+    private void CommitResourceThresholdFromText()
+    {
+        var v = ParseResourceThresholdText(ResourceThresholdTextBox.Text);
+        _resourceThresholdPercent = v;
+        SyncResourceThresholdTextFromValue();
+        PersistTimerSettings();
+    }
+
+    private void ResourceThresholdTextBox_OnLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressResourceThresholdEvents)
+            return;
+        CommitResourceThresholdFromText();
+    }
+
+    private void ResourceThresholdTextBox_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            CommitResourceThresholdFromText();
+            e.Handled = true;
+        }
+    }
+
+    private void ResourceThresholdUpButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _resourceThresholdPercent = Math.Clamp(_resourceThresholdPercent + 1, 0, 100);
+        SyncResourceThresholdTextFromValue();
+        PersistTimerSettings();
+    }
+
+    private void ResourceThresholdDownButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        _resourceThresholdPercent = Math.Clamp(_resourceThresholdPercent - 1, 0, 100);
+        SyncResourceThresholdTextFromValue();
+        PersistTimerSettings();
+    }
+
+    private void SelectResourceByTriggerKey(string key)
+    {
+        key = NormalizeResourceTriggerKey(key);
+        foreach (ComboBoxItem item in ResourceKindCombo.Items)
+        {
+            if (item.Tag is string t && string.Equals(t, key, StringComparison.OrdinalIgnoreCase))
+            {
+                ResourceKindCombo.SelectedItem = item;
+                _resourceWatchKey = key;
+                return;
+            }
+        }
+
+        foreach (ComboBoxItem item in ResourceKindCombo.Items)
+        {
+            if (item.Tag is string t && t == ResourceTriggerKeys.Cpu)
+            {
+                ResourceKindCombo.SelectedItem = item;
+                _resourceWatchKey = ResourceTriggerKeys.Cpu;
+                return;
+            }
+        }
+    }
+
+    private void ApplyResourceMonitorPanelClosedUi()
+    {
+        ResourceMonitorOverlay.Visibility = Visibility.Collapsed;
+        MainTimerStack.Visibility = Visibility.Visible;
+        ResourceKindCombo.IsEnabled = true;
+        ResourceThresholdTextBox.IsEnabled = true;
+        ResourceThresholdUpButton.IsEnabled = true;
+        ResourceThresholdDownButton.IsEnabled = true;
+    }
+
+    private void ApplyResourceMonitorWatchingUi()
+    {
+        MainTimerStack.Visibility = Visibility.Collapsed;
+        ResourceMonitorOverlay.Visibility = Visibility.Visible;
+        ResourceKindCombo.IsEnabled = false;
+        ResourceThresholdTextBox.IsEnabled = false;
+        ResourceThresholdUpButton.IsEnabled = false;
+        ResourceThresholdDownButton.IsEnabled = false;
+    }
+
+    private void OpenResourceMonitorFromMenu()
+    {
+        CloseExactTimeDialog();
+        InitResourceMonitorCombos();
+        MainTimerStack.Visibility = Visibility.Visible;
+        ResourceMonitorOverlay.Visibility = Visibility.Visible;
+        _resourceSampler?.Dispose();
+        _resourceSampler = new ResourceMonitorSampler();
+        EnsureResourcePollTimer();
+        UpdateStartEnabled();
+    }
+
+    private void CloseResourceMonitorPanel()
+    {
+        if (ResourceMonitorOverlay.Visibility != Visibility.Visible)
+            return;
+
+        if (_state == TimerState.ResourceWaiting)
+            StopResourceConditionWatch();
+        else
+        {
+            _resourceSampler?.Dispose();
+            _resourceSampler = null;
+            ReleaseResourcePollTimerIfIdle();
+            ApplyResourceMonitorPanelClosedUi();
+        }
+
+        UpdateStartEnabled();
+    }
+
+    private void BtnResourceMonitorClose_OnClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        CloseResourceMonitorPanel();
+    }
+
+    private void ResourceKindCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressResourceComboEvents)
+            return;
+        if (ResourceKindCombo.SelectedItem is ComboBoxItem item && item.Tag is string k)
+        {
+            _resourceWatchKey = NormalizeResourceTriggerKey(k);
+            PersistTimerSettings();
+            _resourceSparkSamples.Clear();
+            UpdateResourceSparkPolyline();
+        }
+    }
+
+    private void EnsureResourcePollTimer()
+    {
+        if (_resourcePollTimer != null)
+            return;
+        _resourcePollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _resourcePollTimer.Tick += OnResourcePollTick;
+        _resourcePollTimer.Start();
+    }
+
+    private void ReleaseResourcePollTimerIfIdle()
+    {
+        if (_state == TimerState.ResourceWaiting)
+            return;
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible)
+            return;
+        if (_resourcePollTimer == null)
+            return;
+        _resourcePollTimer.Stop();
+        _resourcePollTimer.Tick -= OnResourcePollTick;
+        _resourcePollTimer = null;
+    }
+
+    private void OnResourcePollTick(object? sender, EventArgs e)
+    {
+        var sampler = _resourceSampler;
+        if (sampler == null)
+            return;
+        if (_resourcePollBusy)
+            return;
+
+        _resourcePollBusy = true;
+
+        Task.Run(() =>
+        {
+            ResourceSnapshot s;
+            try
+            {
+                s = sampler.ReadSnapshot();
+            }
+            catch
+            {
+                Dispatcher.BeginInvoke(new Action(() => { _resourcePollBusy = false; }));
+                return;
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (_resourceSampler != sampler)
+                        return;
+
+                    if (ResourceMonitorOverlay.Visibility == Visibility.Visible)
+                    {
+                        UpdateResourceLiveTexts(s);
+                        PushResourceSparkSample(ResourceMonitorSampler.GetPercentForKey(_resourceWatchKey, s));
+                        UpdateResourceSparkPolyline();
+                    }
+
+                    if (_state != TimerState.ResourceWaiting)
+                        return;
+
+                    UpdateStatusTextForResourceWait(s);
+
+                    var v = ResourceMonitorSampler.GetPercentForKey(_resourceWatchKey, s);
+                    var thr = _resourceThresholdPercent;
+
+                    if (!_resourceEdgePrimed)
+                    {
+                        _prevResourceValueForEdge = v;
+                        _resourceEdgePrimed = true;
+                        return;
+                    }
+
+                    if (_prevResourceValueForEdge >= thr && v < thr)
+                    {
+                        OnResourceConditionMet();
+                        return;
+                    }
+
+                    _prevResourceValueForEdge = v;
+                }
+                finally
+                {
+                    _resourcePollBusy = false;
+                }
+            }), DispatcherPriority.Normal);
+        });
+    }
+
+    private void ResourceMonitorOverlay_OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (ResourceMonitorOverlay.IsVisible)
+        {
+            _resourceSparkSamples.Clear();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                UpdateResourceSparkPolyline();
+                TryBeginResourceSparkAnimations();
+            }), DispatcherPriority.Loaded);
+        }
+        else
+            StopResourceSparkAnimations();
+    }
+
+    private void TryBeginResourceSparkAnimations()
+    {
+        if (!IsLoaded || !ResourceMonitorOverlay.IsVisible)
+            return;
+        StopResourceSparkAnimations();
+        _resourceSparkScanStoryboard ??= TryFindResource("ResourceSparkScanStoryboard") as Storyboard;
+        _resourceSparkPulseStoryboard ??= TryFindResource("ResourceSparklinePulseStoryboard") as Storyboard;
+        try
+        {
+            _resourceSparkScanStoryboard?.Begin(this, isControllable: true);
+            _resourceSparkPulseStoryboard?.Begin(this, isControllable: true);
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    private void StopResourceSparkAnimations()
+    {
+        try
+        {
+            _resourceSparkScanStoryboard?.Stop(this);
+            _resourceSparkPulseStoryboard?.Stop(this);
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    private void PushResourceSparkSample(float value)
+    {
+        value = (float)Math.Clamp(value, 0, 100);
+        _resourceSparkSamples.Add(value);
+        while (_resourceSparkSamples.Count > ResourceSparkMaxPoints)
+            _resourceSparkSamples.RemoveAt(0);
+    }
+
+    private void UpdateResourceSparkPolyline()
+    {
+        var pts = new PointCollection();
+        var n = _resourceSparkSamples.Count;
+        if (n < 2)
+        {
+            ResourceSparkline.Points = pts;
+            return;
+        }
+
+        const double pad = 2;
+        var w = ResourceSparkCanvasW;
+        var h = ResourceSparkCanvasH;
+        for (var i = 0; i < n; i++)
+        {
+            var x = pad + (w - 2 * pad) * i / (n - 1);
+            var y = pad + (h - 2 * pad) * (1 - _resourceSparkSamples[i] / 100.0);
+            pts.Add(new System.Windows.Point(x, y));
+        }
+
+        ResourceSparkline.Points = pts;
+    }
+
+    private void UpdateResourceLiveTexts(ResourceSnapshot s)
+    {
+        var name = GetResourceWatchDisplayName();
+        var v = ResourceMonitorSampler.GetPercentForKey(_resourceWatchKey, s);
+        var pct = (int)Math.Round(Math.Clamp(v, 0, 100));
+        ResourceLiveSelectedText.Text = LocalizationService.T("MainWindow.ResourceLiveSelected", name, pct);
+    }
+
+    private void UpdateStatusTextForResourceWait(ResourceSnapshot? s)
+    {
+        var name = GetResourceWatchDisplayName();
+        var line = LocalizationService.T("MainWindow.StatusResourceWait", name, _resourceThresholdPercent);
+        if (s.HasValue)
+        {
+            var cur = ResourceMonitorSampler.GetPercentForKey(_resourceWatchKey, s.Value);
+            var cv = (int)Math.Round(Math.Clamp(cur, 0, 100));
+            line += " · " + LocalizationService.T("MainWindow.StatusResourceCurrent", cv);
+        }
+
+        StatusText.Text = line;
+    }
+
+    private string GetResourceWatchDisplayName()
+    {
+        if (ResourceKindCombo.SelectedItem is ComboBoxItem c)
+        {
+            if (c.Content is string s)
+                return s;
+            if (c.Content != null)
+                return c.Content.ToString() ?? _resourceWatchKey;
+        }
+
+        return _resourceWatchKey;
+    }
+
+    private void ApplyResourceSelectionFromUi()
+    {
+        if (ResourceKindCombo.SelectedItem is ComboBoxItem rki && rki.Tag is string k)
+            _resourceWatchKey = NormalizeResourceTriggerKey(k);
+        _resourceThresholdPercent = ParseResourceThresholdText(ResourceThresholdTextBox.Text);
+    }
+
+    private void StartResourceConditionWatch()
+    {
+        if (_state != TimerState.Idle)
+            return;
+
+        ApplyResourceSelectionFromUi();
+        PersistTimerSettings();
+
+        _resourceWatchH = HoursDigit.Value;
+        _resourceWatchM = MinutesDigit.Value;
+        _resourceWatchS = SecondsDigit.Value;
+
+        _state = TimerState.ResourceWaiting;
+
+        _resourceSampler?.Dispose();
+        _resourceSampler = new ResourceMonitorSampler();
+        _resourceEdgePrimed = false;
+        _prevResourceValueForEdge = 0;
+
+        ApplyResourceMonitorWatchingUi();
+
+        SetDigitsReadOnly(true);
+        SetOptionsEnabled(false);
+        SetMainTimerDigitsZero();
+        UpdateStatusTextForResourceWait(null);
+        StartColonBlink();
+
+        EnsureResourcePollTimer();
+        UpdateButtonState();
+        SyncTrayCountdownIcon();
+    }
+
+    private void StopResourceConditionWatch()
+    {
+        if (_resourcePollTimer != null)
+        {
+            _resourcePollTimer.Stop();
+            _resourcePollTimer.Tick -= OnResourcePollTick;
+            _resourcePollTimer = null;
+        }
+
+        _resourceSampler?.Dispose();
+        _resourceSampler = null;
+
+        _state = TimerState.Idle;
+        HoursDigit.SetValueSilent(_resourceWatchH);
+        MinutesDigit.SetValueSilent(_resourceWatchM);
+        SecondsDigit.SetValueSilent(_resourceWatchS);
+        RecalcRemaining();
+
+        ApplyResourceMonitorPanelClosedUi();
+
+        SetDigitsReadOnly(false);
+        SetOptionsEnabled(true);
+        StopColonBlink();
+        StatusText.Text = "";
+        UpdateButtonState();
+        SyncTrayCountdownIcon();
+        UpdateStartEnabled();
+    }
+
+    private void OnResourceConditionMet()
+    {
+        if (_resourcePollTimer != null)
+        {
+            _resourcePollTimer.Stop();
+            _resourcePollTimer.Tick -= OnResourcePollTick;
+            _resourcePollTimer = null;
+        }
+
+        _resourceSampler?.Dispose();
+        _resourceSampler = null;
+
+        ApplyResourceMonitorPanelClosedUi();
+
+        StatusText.Text = "";
+
+        int delaySec = GetDelaySeconds();
+        if (delaySec > 0)
+        {
+            PulseColonForOneSecond();
+            StartDelayCountdown(delaySec);
+        }
+        else
+        {
+            ExecuteAction();
+        }
     }
 
     private void ApplyActionVisualTheme()
@@ -174,7 +744,7 @@ public partial class MainWindow : Window
         MinutesDigit.ShutdownAction = shutdown;
         SecondsDigit.ShutdownAction = shutdown;
 
-        if (_state == TimerState.Running)
+        if (_state == TimerState.Running || _state == TimerState.ResourceWaiting)
             StartColonBlink();
         else
             StopColonBlink();
@@ -311,8 +881,20 @@ public partial class MainWindow : Window
     private void MainWindow_OnUnloaded(object sender, RoutedEventArgs e)
     {
         LocalizationService.LanguageChanged -= OnLocalizationLanguageChanged;
+        ResourceMonitorOverlay.IsVisibleChanged -= ResourceMonitorOverlay_OnIsVisibleChanged;
+        StopResourceSparkAnimations();
         _closeActionPopupTimer?.Stop();
         _closeDelayPopupTimer?.Stop();
+        if (_resourcePollTimer != null)
+        {
+            _resourcePollTimer.Stop();
+            _resourcePollTimer.Tick -= OnResourcePollTick;
+            _resourcePollTimer = null;
+        }
+
+        _resourcePollBusy = false;
+        _resourceSampler?.Dispose();
+        _resourceSampler = null;
     }
 
     private void EnsureActionCloseTimer()
@@ -507,6 +1089,12 @@ public partial class MainWindow : Window
     private void UpdateStartEnabled()
     {
         if (_state != TimerState.Idle) return;
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible)
+        {
+            BtnStartStop.IsEnabled = true;
+            return;
+        }
+
         BtnStartStop.IsEnabled = GetTotalFromDigits() > 0;
     }
 
@@ -531,6 +1119,12 @@ public partial class MainWindow : Window
 
     private void StopTimer()
     {
+        if (_state == TimerState.ResourceWaiting)
+        {
+            StopResourceConditionWatch();
+            return;
+        }
+
         bool wasDelay = _state == TimerState.DelayCountdown;
         _state = TimerState.Idle;
         _countdown?.Stop();
@@ -776,6 +1370,7 @@ public partial class MainWindow : Window
         if (e.ChangedButton != MouseButton.Right) return;
         if (_state != TimerState.Idle) return;
         if (ExactTimeOverlay.Visibility == Visibility.Visible) return;
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible) return;
 
         // ПКМ по любой кнопке — не показывать «точное время» (на «Старт» — сброс, как раньше; на неактивной «Старт» — тишина)
         if (ShouldSuppressExactTimeContextMenu(e))
@@ -843,6 +1438,31 @@ public partial class MainWindow : Window
         item.Header = header;
         item.Click += (_, _) => OpenExactTimeDialog();
         cm.Items.Add(item);
+
+        var itemRes = new MenuItem();
+        var headerRes = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        var monitorIcon = new TextBlock
+        {
+            Text = "\uE9D2",
+            FontFamily = Application.Current.TryFindResource("Rs.Font.Mdl2") as System.Windows.Media.FontFamily
+                         ?? new System.Windows.Media.FontFamily("pack://application:,,,/Fonts/segmdl2.ttf#Segoe MDL2 Assets"),
+            FontSize = 16,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+        monitorIcon.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
+        var labelRes = new TextBlock
+        {
+            Text = LocalizationService.T("MainWindow.ResourceMonitorMenu"),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        labelRes.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
+        headerRes.Children.Add(monitorIcon);
+        headerRes.Children.Add(labelRes);
+        itemRes.Header = headerRes;
+        itemRes.Click += (_, _) => OpenResourceMonitorFromMenu();
+        cm.Items.Add(itemRes);
+
         cm.PlacementTarget = this;
         cm.Placement = PlacementMode.MousePoint;
         cm.IsOpen = true;
@@ -850,6 +1470,7 @@ public partial class MainWindow : Window
 
     private void OpenExactTimeDialog()
     {
+        CloseResourceMonitorPanel();
         var n = DateTime.Now;
         ExactTimeHours.SetValueSilent(n.Hour);
         ExactTimeMinutes.SetValueSilent(n.Minute);
@@ -911,13 +1532,16 @@ public partial class MainWindow : Window
     {
         if (Application.Current is not App app)
             return;
-        bool active = _state == TimerState.Running || _state == TimerState.DelayCountdown;
-        app.SyncTrayCountdownIcon(active, _remainingSeconds, _actionIsSignal);
+        bool active = _state == TimerState.Running
+                      || _state == TimerState.DelayCountdown
+                      || _state == TimerState.ResourceWaiting;
+        bool resWait = _state == TimerState.ResourceWaiting;
+        app.SyncTrayCountdownIcon(active, _remainingSeconds, _actionIsSignal, resWait);
     }
 
     private void UpdateTimerDisplay()
     {
-        if (_state == TimerState.DelayCountdown)
+        if (_state == TimerState.DelayCountdown || _state == TimerState.ResourceWaiting)
         {
             SetMainTimerDigitsZero();
             SyncTrayCountdownIcon();
@@ -1040,7 +1664,9 @@ public partial class MainWindow : Window
 
     private void UpdateButtonState()
     {
-        bool showStop = _state == TimerState.Running || _state == TimerState.DelayCountdown;
+        bool showStop = _state == TimerState.Running
+                        || _state == TimerState.DelayCountdown
+                        || _state == TimerState.ResourceWaiting;
         bool shouldAnimate = _wasShowingStopButton.HasValue && _wasShowingStopButton.Value != showStop;
 
         void ApplyStartStopLabelAndEnabled()
@@ -1052,6 +1678,7 @@ public partial class MainWindow : Window
                     break;
                 case TimerState.Running:
                 case TimerState.DelayCountdown:
+                case TimerState.ResourceWaiting:
                     BtnStartStop.Content = LocalizationService.T("MainWindow.BtnStop");
                     BtnStartStop.IsEnabled = true;
                     break;
@@ -1120,7 +1747,12 @@ public partial class MainWindow : Window
         BtnStartStop.BeginAnimation(UIElement.OpacityProperty, fadeOut);
     }
 
-    private void UpdateStatusText() => StatusText.Text = "";
+    private void UpdateStatusText()
+    {
+        if (_state == TimerState.ResourceWaiting)
+            return;
+        StatusText.Text = "";
+    }
 
     // ── Colon blink animation ───────────────────────────────
     // Один полный цикл (ярко → тускло → ярко) длится ровно 1 с и запускается в том же тике, что и смена секунды
@@ -1175,10 +1807,14 @@ public partial class MainWindow : Window
         switch (_state)
         {
             case TimerState.Idle:
-                StartTimer();
+                if (ResourceMonitorOverlay.Visibility == Visibility.Visible)
+                    StartResourceConditionWatch();
+                else
+                    StartTimer();
                 break;
             case TimerState.Running:
             case TimerState.DelayCountdown:
+            case TimerState.ResourceWaiting:
                 StopTimer();
                 break;
             case TimerState.SignalFinished:
@@ -1193,7 +1829,7 @@ public partial class MainWindow : Window
         if (_state == TimerState.SignalFinished)
             return;
 
-        if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
+        if (_state == TimerState.Running || _state == TimerState.DelayCountdown || _state == TimerState.ResourceWaiting)
             StopTimer();
 
         HoursDigit.SetValueSilent(0);
@@ -1507,10 +2143,12 @@ public partial class MainWindow : Window
     {
         if (ExactTimeOverlay.Visibility == Visibility.Visible)
             CloseExactTimeDialog();
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible)
+            CloseResourceMonitorPanel();
 
         // Сначала подтверждение при работающем таймере — и при закрытии крестиком, и при «Выход» из трея
         // (раньше App.ShutdownRequested обрабатывался раньше и пропускал этот шаг).
-        if (_state == TimerState.Running || _state == TimerState.DelayCountdown)
+        if (_state == TimerState.Running || _state == TimerState.DelayCountdown || _state == TimerState.ResourceWaiting)
         {
             var dlg = new ConfirmCloseWindow { Owner = this };
             if (!IsVisible)
@@ -1562,6 +2200,13 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             CloseExactTimeDialog();
+            return;
+        }
+
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible && e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CloseResourceMonitorPanel();
             return;
         }
 

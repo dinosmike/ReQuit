@@ -42,8 +42,8 @@ public partial class App : Application
 
     internal void RefreshTrayMenu() => _tray?.RefreshTexts();
 
-    internal void SyncTrayCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal) =>
-        _tray?.SyncCountdownIcon(timerActive, remainingSeconds, actionIsSignal);
+    internal void SyncTrayCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal, bool resourceConditionWait = false) =>
+        _tray?.SyncCountdownIcon(timerActive, remainingSeconds, actionIsSignal, resourceConditionWait);
 
     protected override void OnExit(ExitEventArgs e)
     {

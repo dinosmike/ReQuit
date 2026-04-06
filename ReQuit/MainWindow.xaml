@@ -420,6 +420,26 @@
                 <LinearDoubleKeyFrame KeyTime="0:0:1.12" Value="0.2"/>
             </DoubleAnimationUsingKeyFrames>
         </Storyboard>
+
+        <!-- Монитор ресурсов: сканирующая полоса + лёгкий пульс линии графика -->
+        <Storyboard x:Key="ResourceSparkScanStoryboard" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="ResourceSparkScan"
+                             Storyboard.TargetProperty="(Canvas.Left)"
+                             From="-40" To="300" Duration="0:0:2.35">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+        <Storyboard x:Key="ResourceSparklinePulseStoryboard" RepeatBehavior="Forever" AutoReverse="True">
+            <DoubleAnimation Storyboard.TargetName="ResourceSparkline"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0.65" To="1" Duration="0:0:0.45">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
     </Window.Resources>
 
     <Border Background="{DynamicResource Rs.Window.Background}"
@@ -515,35 +535,198 @@
                            HorizontalAlignment="Center"
                            Margin="0,0,0,4"/>
 
-                <!-- ═══ Timer display ═══ -->
-                <StackPanel Grid.Row="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Top">
+                <!-- ═══ Timer display / монитор ресурсов (оверлей того же размера) ═══ -->
+                <Grid Grid.Row="1"
+                      VerticalAlignment="Stretch"
+                      HorizontalAlignment="Stretch">
+                    <StackPanel x:Name="MainTimerStack"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Top"
+                                Margin="0,20,0,0">
 
-                    <controls:TimerDigitGroup x:Name="HoursDigit"
-                                              MaxValue="24" UnitText=""/>
+                        <controls:TimerDigitGroup x:Name="HoursDigit"
+                                                  MaxValue="24" UnitText=""/>
 
-                    <TextBlock x:Name="Colon1" Text=":"
-                               FontSize="68" FontWeight="Bold"
-                               Foreground="{DynamicResource Rs.Text.Muted}"
-                               VerticalAlignment="Center"
-                               Margin="8,0,8,0"
-                               Opacity="0.5"/>
+                        <TextBlock x:Name="Colon1" Text=":"
+                                   FontSize="68" FontWeight="Bold"
+                                   Foreground="{DynamicResource Rs.Text.Muted}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,8,0"
+                                   Opacity="0.5"/>
 
-                    <controls:TimerDigitGroup x:Name="MinutesDigit"
-                                              MaxValue="59" UnitText=""/>
+                        <controls:TimerDigitGroup x:Name="MinutesDigit"
+                                                  MaxValue="59" UnitText=""/>
 
-                    <TextBlock x:Name="Colon2" Text=":"
-                               FontSize="68" FontWeight="Bold"
-                               Foreground="{DynamicResource Rs.Text.Muted}"
-                               VerticalAlignment="Center"
-                               Margin="8,0,8,0"
-                               Opacity="0.5"/>
+                        <TextBlock x:Name="Colon2" Text=":"
+                                   FontSize="68" FontWeight="Bold"
+                                   Foreground="{DynamicResource Rs.Text.Muted}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,8,0"
+                                   Opacity="0.5"/>
 
-                    <controls:TimerDigitGroup x:Name="SecondsDigit"
-                                              MaxValue="59" UnitText=""/>
-                </StackPanel>
+                        <controls:TimerDigitGroup x:Name="SecondsDigit"
+                                                  MaxValue="59" UnitText=""/>
+                    </StackPanel>
+
+                    <Grid x:Name="ResourceMonitorOverlay"
+                          Visibility="Collapsed"
+                          VerticalAlignment="Stretch"
+                          HorizontalAlignment="Stretch"
+                          Background="{DynamicResource Rs.Window.Background}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <TextBlock Text="{DynamicResource Loc_MainWindow_ResourceConditionTitle}"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Rs.Text.Primary}"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Margin="40,0,40,0"/>
+                            <Button x:Name="BtnResourceMonitorClose"
+                                    Width="36"
+                                    Height="36"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Margin="0,-6,-8,-6"
+                                    Padding="0"
+                                    FontSize="15"
+                                    Style="{StaticResource Rs.TitleBar.Close.Round}"
+                                    Content="&#x00D7;"
+                                    ToolTip="{DynamicResource Loc_MainWindow_TooltipClose}"
+                                    Click="BtnResourceMonitorClose_OnClick"/>
+                        </Grid>
+                        <StackPanel Grid.Row="1"
+                                    HorizontalAlignment="Center"
+                                    MaxWidth="620"
+                                    Margin="0,0,0,4">
+                            <WrapPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="ResourceConditionIfText"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource Rs.Text.Muted}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,6"
+                                           TextWrapping="Wrap"/>
+                                <ComboBox x:Name="ResourceKindCombo"
+                                          MinWidth="150"
+                                          MaxWidth="400"
+                                          Margin="0,0,8,6"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="ResourceKindCombo_OnSelectionChanged"/>
+                                <TextBlock x:Name="ResourceConditionDropsText"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource Rs.Text.Muted}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,6"
+                                           TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                                    <Grid VerticalAlignment="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBox x:Name="ResourceThresholdTextBox"
+                                                 Grid.Column="0"
+                                                 Style="{StaticResource Rs.TextBox.ResourceThreshold}"
+                                                 VerticalAlignment="Stretch"
+                                                 MinHeight="32"
+                                                 LostFocus="ResourceThresholdTextBox_OnLostFocus"
+                                                 KeyDown="ResourceThresholdTextBox_OnKeyDown"/>
+                                        <Border Grid.Column="1"
+                                                BorderBrush="{DynamicResource Rs.Border}"
+                                                BorderThickness="1"
+                                                Width="24"
+                                                MinHeight="32"
+                                                VerticalAlignment="Stretch"
+                                                SnapsToDevicePixels="True">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="1"/>
+                                                    <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+                                                <RepeatButton x:Name="ResourceThresholdUpButton"
+                                                              Grid.Row="0"
+                                                              Style="{StaticResource Rs.RepeatButton.ResourceSpinner}"
+                                                              Delay="350"
+                                                              Interval="80"
+                                                              Click="ResourceThresholdUpButton_OnClick"
+                                                              Content="&#x25B2;"
+                                                              ToolTip="{DynamicResource Loc_MainWindow_ResourceThresholdUp}"/>
+                                                <Border Grid.Row="1" Background="{DynamicResource Rs.Border}" Height="1"/>
+                                                <RepeatButton x:Name="ResourceThresholdDownButton"
+                                                              Grid.Row="2"
+                                                              Style="{StaticResource Rs.RepeatButton.ResourceSpinner}"
+                                                              Delay="350"
+                                                              Interval="80"
+                                                              Click="ResourceThresholdDownButton_OnClick"
+                                                              Content="&#x25BC;"
+                                                              ToolTip="{DynamicResource Loc_MainWindow_ResourceThresholdDown}"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Text="%"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource Rs.Text.Muted}"
+                                               VerticalAlignment="Center"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </WrapPanel>
+                        </StackPanel>
+                        <Border Grid.Row="2"
+                                HorizontalAlignment="Center"
+                                Margin="0,6,0,10"
+                                Width="288"
+                                Height="104"
+                                CornerRadius="6"
+                                BorderBrush="{DynamicResource Rs.Border}"
+                                BorderThickness="1"
+                                Background="{DynamicResource Rs.Surface}"
+                                SnapsToDevicePixels="True">
+                            <Grid Margin="5,4">
+                                <Canvas x:Name="ResourceSparkCanvas"
+                                        Width="276"
+                                        Height="80"
+                                        ClipToBounds="True"
+                                        SnapsToDevicePixels="True">
+                                    <Rectangle x:Name="ResourceSparkScan"
+                                               Canvas.Left="-40"
+                                               Canvas.Top="0"
+                                               Width="42"
+                                               Height="80"
+                                               RadiusX="3" RadiusY="3"
+                                               Fill="#183DD4C3"
+                                               IsHitTestVisible="False"/>
+                                    <Polyline x:Name="ResourceSparkline"
+                                              Opacity="0.92"
+                                              Stroke="{DynamicResource Rs.Accent}"
+                                              StrokeThickness="1.75"
+                                              StrokeLineJoin="Round"
+                                              StrokeEndLineCap="Round"
+                                              SnapsToDevicePixels="True"/>
+                                </Canvas>
+                            </Grid>
+                        </Border>
+                        <TextBlock x:Name="ResourceLiveSelectedText"
+                                   Grid.Row="3"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource Rs.Text.Primary}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,0"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"/>
+                    </Grid>
+                </Grid>
 
                 <!-- ═══ Bottom: action + start + delay ═══ -->
                 <Grid Grid.Row="2">

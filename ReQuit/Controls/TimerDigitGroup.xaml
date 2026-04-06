@@ -7,9 +7,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
             <RowDefinition Height="136"/>
-            <RowDefinition Height="20"/>
         </Grid.RowDefinitions>
 
         <!-- Unit label (часы / минуты / секунды) -->
@@ -20,17 +18,8 @@
                    HorizontalAlignment="Center"
                    Margin="0,0,0,3"/>
 
-        <!-- Up arrow chevron -->
-        <Path x:Name="UpArrow" Grid.Row="1"
-              Data="M 5,10 L 12,3 L 19,10"
-              Stroke="{DynamicResource Rs.Accent}"
-              StrokeThickness="2.2"
-              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-              HorizontalAlignment="Center" VerticalAlignment="Center"
-              Opacity="0" IsHitTestVisible="False"/>
-
         <!-- Digit display card -->
-        <Border x:Name="DigitBorder" Grid.Row="2"
+        <Border x:Name="DigitBorder" Grid.Row="1"
                 CornerRadius="20"
                 BorderBrush="{DynamicResource Rs.Border}"
                 BorderThickness="1.5"
@@ -156,6 +145,24 @@
                     </Rectangle.Fill>
                 </Rectangle>
 
+                <!-- Стрелки внутри циферблата, у краёв с отступом -->
+                <Path x:Name="UpArrow" Grid.Row="0"
+                      Data="M 5,10 L 12,3 L 19,10"
+                      Stroke="{DynamicResource Rs.Accent}"
+                      StrokeThickness="2.2"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      HorizontalAlignment="Center" VerticalAlignment="Top"
+                      Margin="0,13,0,0"
+                      Opacity="0" IsHitTestVisible="False"/>
+                <Path x:Name="DownArrow" Grid.Row="0"
+                      Data="M 5,3 L 12,10 L 19,3"
+                      Stroke="{DynamicResource Rs.Accent}"
+                      StrokeThickness="2.2"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                      Margin="0,0,0,13"
+                      Opacity="0" IsHitTestVisible="False"/>
+
                 <!-- Белый оверлей при наведении: альфа 3/255 ≈ 1% -->
                 <Rectangle x:Name="DialHoverOverlay" Grid.Row="0"
                            Fill="#03FFFFFF"
@@ -163,14 +170,5 @@
                            IsHitTestVisible="False"/>
             </Grid>
         </Border>
-
-        <!-- Down arrow chevron -->
-        <Path x:Name="DownArrow" Grid.Row="3"
-              Data="M 5,3 L 12,10 L 19,3"
-              Stroke="{DynamicResource Rs.Accent}"
-              StrokeThickness="2.2"
-              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-              HorizontalAlignment="Center" VerticalAlignment="Center"
-              Opacity="0" IsHitTestVisible="False"/>
     </Grid>
 </UserControl>

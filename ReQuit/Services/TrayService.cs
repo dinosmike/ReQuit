@@ -51,7 +51,7 @@ public sealed class TrayService : IDisposable
     /// Таймер активен: &gt; 60 мин — «Nч»/«Nh»; иначе минуты 1…60 или секунды 00…59.
     /// Выключение — красный; сигнал — #01a16a. Иначе — обычная иконка приложения.
     /// </summary>
-    public void SyncCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal)
+    public void SyncCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal, bool resourceConditionWait = false)
     {
         if (!timerActive)
         {
@@ -64,6 +64,16 @@ public sealed class TrayService : IDisposable
         var mode = actionIsSignal ? "sig" : "sd";
         string key;
         string glyph;
+
+        if (resourceConditionWait)
+        {
+            key = $"{mode}:reswait";
+            glyph = "..";
+            if (key == _trayIconKey)
+                return;
+            ApplyTrayIcon(key, AppIconFactory.CreateTrayCountdownGlyph(glyph, actionIsSignal));
+            return;
+        }
 
         if (remainingSeconds > 3600)
         {
