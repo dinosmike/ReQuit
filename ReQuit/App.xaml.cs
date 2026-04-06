@@ -42,6 +42,9 @@ public partial class App : Application
 
     internal void RefreshTrayMenu() => _tray?.RefreshTexts();
 
+    internal void SyncTrayCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal) =>
+        _tray?.SyncCountdownIcon(timerActive, remainingSeconds, actionIsSignal);
+
     protected override void OnExit(ExitEventArgs e)
     {
         LocalizationService.LanguageChanged -= OnLocalizationLanguageChanged;

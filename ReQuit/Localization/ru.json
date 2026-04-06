@@ -50,7 +50,8 @@
   "About.GitHubTooltip": "Мои программы на GitHub",
   "About.TooltipClose": "Закрыть",
   "About.Ok": "OK",
+  "Tray.HourSuffix": "ч",
   "Tray.BalloonTip": "ReQuit — таймер выключения",
-  "Tray.MenuOpen": "Открыть",
+  "Tray.MenuOpen": "Открыть ReQuit",
   "Tray.MenuExit": "Выход"
 }

@@ -37,6 +37,7 @@
                 BorderThickness="1.5"
                 ClipToBounds="True"
                 Cursor="SizeNS"
+                PreviewMouseDown="OnDigitPreviewMouseDown"
                 MouseLeftButtonDown="OnDigitMouseDown"
                 MouseRightButtonDown="OnDigitMouseRightButtonDown"
                 MouseMove="OnDigitMouseMove"

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -337,62 +336,15 @@ public partial class TimerDigitGroup : UserControl
         return v;
     }
 
-    /// <summary>Точки «прилипания» к десяткам: 0, 10, … и при необходимости <see cref="MaxValue"/> (например 24 для часов).</summary>
-    private IReadOnlyList<int> GetSnapPoints()
-    {
-        var list = new List<int>();
-        for (int x = 0; x <= MaxValue; x += 10)
-            list.Add(x);
-        if (MaxValue % 10 != 0 && (list.Count == 0 || list[^1] != MaxValue))
-            list.Add(MaxValue);
-        return list;
-    }
-
-    private int SnapNext(int v)
-    {
-        var pts = GetSnapPoints();
-        foreach (var p in pts)
-        {
-            if (p > v)
-                return p;
-        }
-
-        return pts[0];
-    }
-
-    private int SnapPrev(int v)
-    {
-        var pts = GetSnapPoints();
-        for (int i = pts.Count - 1; i >= 0; i--)
-        {
-            if (pts[i] < v)
-                return pts[i];
-        }
-
-        return pts[^1];
-    }
-
-    private void SnapByHalf(bool upperHalf)
-    {
-        int target = upperHalf ? SnapNext(_value) : SnapPrev(_value);
-        if (target == _value)
-            return;
-
-        if (_isAnimating)
-            SnapFinish();
-
-        int old = _value;
-        _value = target;
-        bool slideDown = target < old;
-        RunSlideAnimation(old, target, slideDown, InputAnimMs);
-        ValueChanged?.Invoke();
-    }
-
     // ── Mouse drag ──────────────────────────────────────────
 
-    private void OnDigitMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    private void OnDigitPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsReadOnly) return;
+        if (e.ChangedButton != MouseButton.Middle)
+            return;
+        if (IsReadOnly)
+            return;
+
         e.Handled = true;
 
         if (_value == 0)
@@ -405,6 +357,11 @@ public partial class TimerDigitGroup : UserControl
         _value = 0;
         RunSlideAnimation(old, 0, slideDown: true, InputAnimMs);
         ValueChanged?.Invoke();
+    }
+
+    private void OnDigitMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
     }
 
     private void OnDigitMouseDown(object sender, MouseButtonEventArgs e)
@@ -474,7 +431,11 @@ public partial class TimerDigitGroup : UserControl
             bool upper = _downPosInBorder.Y < h * 0.5;
             DigitBorder.ReleaseMouseCapture();
             e.Handled = true;
-            SnapByHalf(upper);
+            // Верхняя половина — +1, нижняя — −1 (как колесо вверх/вниз).
+            if (upper)
+                StepFromInput(+1, slideDown: false);
+            else
+                StepFromInput(-1, slideDown: true);
             return;
         }
 

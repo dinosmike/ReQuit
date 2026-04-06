@@ -50,7 +50,8 @@
   "About.GitHubTooltip": "My apps on GitHub",
   "About.TooltipClose": "Close",
   "About.Ok": "OK",
+  "Tray.HourSuffix": "h",
   "Tray.BalloonTip": "ReQuit — shutdown & signal timer",
-  "Tray.MenuOpen": "Open",
+  "Tray.MenuOpen": "Open ReQuit",
   "Tray.MenuExit": "Exit"
 }

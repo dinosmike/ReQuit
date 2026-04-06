@@ -1,3 +1,5 @@
+using System.Drawing;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
@@ -12,6 +14,9 @@ public sealed class TrayService : IDisposable
 
     private readonly NotifyIcon _notifyIcon;
     private readonly System.Windows.Forms.Timer _singleClickTimer;
+
+    /// <summary>Кэш последнего вида иконки, чтобы не пересоздавать при каждом тике.</summary>
+    private string _trayIconKey = "default";
 
     public TrayService()
     {
@@ -40,6 +45,57 @@ public sealed class TrayService : IDisposable
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildContextMenu();
         oldMenu?.Dispose();
+    }
+
+    /// <summary>
+    /// Таймер активен: &gt; 60 мин — «Nч»/«Nh»; иначе минуты 1…60 или секунды 00…59.
+    /// Выключение — красный; сигнал — #01a16a. Иначе — обычная иконка приложения.
+    /// </summary>
+    public void SyncCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal)
+    {
+        if (!timerActive)
+        {
+            if (_trayIconKey == "default")
+                return;
+            ApplyTrayIcon("default", AppIconFactory.CreateTrayIcon());
+            return;
+        }
+
+        var mode = actionIsSignal ? "sig" : "sd";
+        string key;
+        string glyph;
+
+        if (remainingSeconds > 3600)
+        {
+            int h = remainingSeconds / 3600;
+            var suffix = LocalizationService.T("Tray.HourSuffix");
+            glyph = h.ToString(CultureInfo.InvariantCulture) + suffix;
+            key = $"{mode}:h:{h}:{LocalizationService.CurrentLanguageCode}";
+        }
+        else if (remainingSeconds >= 60)
+        {
+            int m = remainingSeconds / 60;
+            glyph = m.ToString(CultureInfo.InvariantCulture);
+            key = $"{mode}:m:{m}";
+        }
+        else
+        {
+            glyph = remainingSeconds.ToString("D2", CultureInfo.InvariantCulture);
+            key = $"{mode}:s:{remainingSeconds}";
+        }
+
+        if (key == _trayIconKey)
+            return;
+
+        ApplyTrayIcon(key, AppIconFactory.CreateTrayCountdownGlyph(glyph, actionIsSignal));
+    }
+
+    private void ApplyTrayIcon(string key, Icon newIcon)
+    {
+        _trayIconKey = key;
+        var old = _notifyIcon.Icon;
+        _notifyIcon.Icon = newIcon;
+        old?.Dispose();
     }
 
     private ContextMenuStrip BuildContextMenu()

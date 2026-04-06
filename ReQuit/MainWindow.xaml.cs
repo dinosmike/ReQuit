@@ -109,7 +109,11 @@ public partial class MainWindow : Window
         PreviewKeyDown += MainWindow_PreviewKeyDown_TempDelayOverlayTest;
     }
 
-    private void OnLocalizationLanguageChanged() => RefreshLocalizedUi();
+    private void OnLocalizationLanguageChanged()
+    {
+        RefreshLocalizedUi();
+        SyncTrayCountdownIcon();
+    }
 
     private void RefreshLocalizedUi()
     {
@@ -423,6 +427,7 @@ public partial class MainWindow : Window
         ApplyActionVisualTheme();
         UpdateDelayOptionCardVisibility();
         PersistTimerSettings();
+        SyncTrayCountdownIcon();
     }
 
     private void ActionPickSignal_OnClick(object sender, RoutedEventArgs e)
@@ -437,6 +442,7 @@ public partial class MainWindow : Window
         ApplyActionVisualTheme();
         UpdateDelayOptionCardVisibility();
         PersistTimerSettings();
+        SyncTrayCountdownIcon();
     }
 
     private void DelayPick_OnClick(object sender, RoutedEventArgs e)
@@ -508,6 +514,7 @@ public partial class MainWindow : Window
         UpdateButtonState();
         UpdateStatusText();
         StartColonBlink();
+        SyncTrayCountdownIcon();
     }
 
     private void StopTimer()
@@ -523,7 +530,7 @@ public partial class MainWindow : Window
         UpdateStatusText();
         StopColonBlink();
         UpdateStartEnabled();
-
+        SyncTrayCountdownIcon();
     }
 
     private void ShowDelayOverlay()
@@ -703,10 +710,12 @@ public partial class MainWindow : Window
                 StopColonBlink();
                 UpdateStartEnabled();
                 StatusText.Text = "";
+                SyncTrayCountdownIcon();
                 break;
 
             case ActionKind.Signal:
                 ShowSignalFinishedOverlay();
+                SyncTrayCountdownIcon();
                 break;
         }
     }
@@ -745,15 +754,25 @@ public partial class MainWindow : Window
         SetOptionsEnabled(true);
         UpdateButtonState();
         UpdateStartEnabled();
+        SyncTrayCountdownIcon();
     }
 
     private void BtnSignalFinishedOk_OnClick(object sender, RoutedEventArgs e) => DismissSignalFinishedOverlay();
+
+    private void SyncTrayCountdownIcon()
+    {
+        if (Application.Current is not App app)
+            return;
+        bool active = _state == TimerState.Running || _state == TimerState.DelayCountdown;
+        app.SyncTrayCountdownIcon(active, _remainingSeconds, _actionIsSignal);
+    }
 
     private void UpdateTimerDisplay()
     {
         if (_state == TimerState.DelayCountdown)
         {
             SetMainTimerDigitsZero();
+            SyncTrayCountdownIcon();
             return;
         }
 
@@ -764,6 +783,7 @@ public partial class MainWindow : Window
         if (h != HoursDigit.Value) HoursDigit.AnimateToValue(h, slideDown: true);
         if (m != MinutesDigit.Value) MinutesDigit.AnimateToValue(m, slideDown: true);
         if (s != SecondsDigit.Value) SecondsDigit.AnimateToValue(s, slideDown: true);
+        SyncTrayCountdownIcon();
     }
 
     private void SetMainTimerDigitsZero()
