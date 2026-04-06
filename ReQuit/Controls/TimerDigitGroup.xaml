@@ -32,7 +32,6 @@
         <!-- Digit display card -->
         <Border x:Name="DigitBorder" Grid.Row="2"
                 CornerRadius="20"
-                Background="#141D2B"
                 BorderBrush="{DynamicResource Rs.Border}"
                 BorderThickness="1.5"
                 ClipToBounds="True"
@@ -44,7 +43,14 @@
                 MouseLeftButtonUp="OnDigitMouseUp"
                 MouseLeave="OnDigitMouseLeave"
                 MouseWheel="OnDigitMouseWheel">
-            <Grid>
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#141D2B" Offset="0"/>
+                    <GradientStop Color="#1B263A" Offset="0.5"/>
+                    <GradientStop Color="#141D2B" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Grid Background="Transparent">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
@@ -149,6 +155,12 @@
                         </LinearGradientBrush>
                     </Rectangle.Fill>
                 </Rectangle>
+
+                <!-- Белый оверлей при наведении: альфа 3/255 ≈ 1% -->
+                <Rectangle x:Name="DialHoverOverlay" Grid.Row="0"
+                           Fill="#03FFFFFF"
+                           Opacity="0"
+                           IsHitTestVisible="False"/>
             </Grid>
         </Border>
 

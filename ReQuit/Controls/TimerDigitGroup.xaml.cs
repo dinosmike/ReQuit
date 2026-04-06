@@ -75,6 +75,8 @@ public partial class TimerDigitGroup : UserControl
         ApplyDigitTheme();
         DigitBorder.SizeChanged += (_, _) => UpdateDigitBorderClip();
         Loaded += (_, _) => UpdateDigitBorderClip();
+        DigitBorder.MouseEnter += (_, _) => RefreshDialHoverOverlay();
+        DigitBorder.MouseLeave += (_, _) => RefreshDialHoverOverlay();
     }
 
     /// <summary>
@@ -124,7 +126,10 @@ public partial class TimerDigitGroup : UserControl
         {
             FadeArrows(0);
             ResetBorderBrush();
+            DialHoverOverlay.Opacity = 0;
         }
+        else
+            RefreshDialHoverOverlay();
     }
 
     private void ApplyDigitTheme()
@@ -470,6 +475,15 @@ public partial class TimerDigitGroup : UserControl
     }
 
     // ── Hover effects ───────────────────────────────────────
+
+    private void RefreshDialHoverOverlay()
+    {
+        // Сила подсветки задана альфой в Fill (#03FFFFFF ≈ 1% белого); здесь только вкл/выкл слой.
+        if (IsReadOnly || !DigitBorder.IsMouseOver)
+            DialHoverOverlay.Opacity = 0;
+        else
+            DialHoverOverlay.Opacity = 1;
+    }
 
     private void OnGroupMouseEnter(object sender, MouseEventArgs e)
     {
