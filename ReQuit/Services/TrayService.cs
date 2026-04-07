@@ -18,6 +18,12 @@ public sealed class TrayService : IDisposable
     /// <summary>Кэш последнего вида иконки, чтобы не пересоздавать при каждом тике.</summary>
     private string _trayIconKey = "default";
 
+    // Remember last timer state so language switch keeps correct tooltip.
+    private bool _lastTimerActive;
+    private int _lastRemainingSeconds;
+    private bool _lastActionIsSignal;
+    private bool _lastResourceConditionWait;
+
     public TrayService()
     {
         _singleClickTimer = new System.Windows.Forms.Timer { Interval = SingleClickDelayMs };
@@ -41,7 +47,7 @@ public sealed class TrayService : IDisposable
 
     public void RefreshTexts()
     {
-        _notifyIcon.Text = LocalizationService.T("Tray.BalloonTip");
+        ApplyTooltip(_lastTimerActive, _lastRemainingSeconds, _lastResourceConditionWait);
         var oldMenu = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = BuildContextMenu();
         oldMenu?.Dispose();
@@ -53,6 +59,13 @@ public sealed class TrayService : IDisposable
     /// </summary>
     public void SyncCountdownIcon(bool timerActive, int remainingSeconds, bool actionIsSignal, bool resourceConditionWait = false)
     {
+        _lastTimerActive = timerActive;
+        _lastRemainingSeconds = remainingSeconds;
+        _lastActionIsSignal = actionIsSignal;
+        _lastResourceConditionWait = resourceConditionWait;
+
+        ApplyTooltip(timerActive, remainingSeconds, resourceConditionWait);
+
         if (!timerActive)
         {
             if (_trayIconKey == "default")
@@ -98,6 +111,34 @@ public sealed class TrayService : IDisposable
             return;
 
         ApplyTrayIcon(key, AppIconFactory.CreateTrayCountdownGlyph(glyph, actionIsSignal));
+    }
+
+    private void ApplyTooltip(bool timerActive, int remainingSeconds, bool resourceConditionWait)
+    {
+        string text;
+        if (!timerActive)
+            text = LocalizationService.T("Tray.BalloonTip");
+        else if (resourceConditionWait)
+            text = LocalizationService.T("Tray.TooltipResourceWait");
+        else
+            text = LocalizationService.T("Tray.TooltipRemaining", FormatExactRemaining(remainingSeconds));
+
+        // NotifyIcon.Text is limited (typically 63 chars). Keep it safe.
+        if (text.Length > 63)
+            text = text.Substring(0, 63);
+
+        if (!string.Equals(_notifyIcon.Text, text, StringComparison.Ordinal))
+            _notifyIcon.Text = text;
+    }
+
+    private static string FormatExactRemaining(int totalSeconds)
+    {
+        if (totalSeconds < 0)
+            totalSeconds = 0;
+        int h = totalSeconds / 3600;
+        int m = (totalSeconds % 3600) / 60;
+        int s = totalSeconds % 60;
+        return $"{h:D2}:{m:D2}:{s:D2}";
     }
 
     private void ApplyTrayIcon(string key, Icon newIcon)

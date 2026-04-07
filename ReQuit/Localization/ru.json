@@ -76,6 +76,8 @@
   "About.Ok": "OK",
   "Tray.HourSuffix": "ч",
   "Tray.BalloonTip": "ReQuit — таймер выключения",
+  "Tray.TooltipRemaining": "Осталось {0}",
+  "Tray.TooltipResourceWait": "ReQuit — ожидание условия",
   "Tray.MenuOpen": "Открыть ReQuit",
   "Tray.MenuExit": "Выход"
 }

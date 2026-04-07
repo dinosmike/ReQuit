@@ -76,6 +76,8 @@
   "About.Ok": "OK",
   "Tray.HourSuffix": "h",
   "Tray.BalloonTip": "ReQuit — shutdown & signal timer",
+  "Tray.TooltipRemaining": "Remaining {0}",
+  "Tray.TooltipResourceWait": "ReQuit — waiting for condition",
   "Tray.MenuOpen": "Open ReQuit",
   "Tray.MenuExit": "Exit"
 }
