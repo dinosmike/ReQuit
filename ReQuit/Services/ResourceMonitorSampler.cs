@@ -18,7 +18,8 @@ public readonly record struct ResourceSnapshot(
     IReadOnlyList<NetInterfaceSample> NetSamples);
 
 /// <summary>
-/// CPU: счётчик <c>\Processor(_Total)\% Processor Time</c> (как в диспетчере задач для суммарной загрузки), иначе GetSystemTimes.
+/// CPU: <c>Processor Information\_Total\% Processor Utility</c> (как график ЦП в диспетчере задач Win10+), иначе
+/// <c>Processor\_Total\% Processor Time</c>, затем WMI, затем GetSystemTimes. Счётчики создаются в потоке первого опроса.
 /// GPU: WMI + «GPU Engine»; сеть по интерфейсам.
 /// </summary>
 public sealed class ResourceMonitorSampler : IDisposable
@@ -47,8 +48,9 @@ public sealed class ResourceMonitorSampler : IDisposable
     private ulong _prevUser;
     private bool _cpuPrimed;
 
-    /// <summary>Совпадает с источником данных диспетчера задач для общей загрузки CPU (не отдельный процесс).</summary>
-    private PerformanceCounter? _cpuTotalCounter;
+    private PerformanceCounter? _cpuProcessorUtilityCounter;
+    private PerformanceCounter? _cpuProcessorTimeCounter;
+    private bool _cpuPerfCountersEnsureAttempted;
 
     private readonly List<GpuAdapterCounters> _gpuAdapters = new();
 
@@ -75,30 +77,48 @@ public sealed class ResourceMonitorSampler : IDisposable
 
     public ResourceMonitorSampler()
     {
-        TryBuildCpuTotalPerformanceCounter();
         BuildGpuCounters();
     }
 
-    private void TryBuildCpuTotalPerformanceCounter()
+    private static PerformanceCounter? TryOpenCpuCounter(string category, string counter, string instance)
     {
+        PerformanceCounter? pc = null;
         try
         {
-            if (!PerformanceCounterCategory.Exists("Processor"))
-                return;
-
-            var cat = new PerformanceCounterCategory("Processor");
-            if (!cat.InstanceExists("_Total"))
-                return;
-
-            _cpuTotalCounter = new PerformanceCounter("Processor", "% Processor Time", "_Total", true);
-            _ = _cpuTotalCounter.NextValue();
-            _ = _cpuTotalCounter.NextValue();
+            if (!PerformanceCounterCategory.Exists(category))
+                return null;
+            var cat = new PerformanceCounterCategory(category);
+            if (!cat.InstanceExists(instance))
+                return null;
+            pc = new PerformanceCounter(category, counter, instance, true);
+            _ = pc.NextValue();
+            _ = pc.NextValue();
+            var ok = pc;
+            pc = null;
+            return ok;
         }
         catch
         {
-            _cpuTotalCounter?.Dispose();
-            _cpuTotalCounter = null;
+            return null;
         }
+        finally
+        {
+            pc?.Dispose();
+        }
+    }
+
+    /// <summary>Создание и чтение на одном потоке (пул), иначе PDH может давать неверные значения.</summary>
+    private void EnsureCpuPerformanceCounters()
+    {
+        if (_cpuPerfCountersEnsureAttempted)
+            return;
+        _cpuPerfCountersEnsureAttempted = true;
+
+        _cpuProcessorUtilityCounter = TryOpenCpuCounter("Processor Information", "% Processor Utility", "_Total");
+        if (_cpuProcessorUtilityCounter != null)
+            return;
+
+        _cpuProcessorTimeCounter = TryOpenCpuCounter("Processor", "% Processor Time", "_Total");
     }
 
     /// <summary>Сетевые интерфейсы для списка (как в диспетчере задач: активные, не loopback).</summary>
@@ -523,20 +543,73 @@ public sealed class ResourceMonitorSampler : IDisposable
 
     private float ReadCpuPercent()
     {
-        if (_cpuTotalCounter != null)
+        EnsureCpuPerformanceCounters();
+
+        if (_cpuProcessorUtilityCounter != null)
         {
             try
             {
-                var v = _cpuTotalCounter.NextValue();
+                var v = _cpuProcessorUtilityCounter.NextValue();
                 return (float)Math.Clamp(v, 0f, 100f);
             }
             catch
             {
-                // ignored — fallback ниже
+                // ignored
             }
         }
 
+        if (_cpuProcessorTimeCounter != null)
+        {
+            try
+            {
+                var v = _cpuProcessorTimeCounter.NextValue();
+                return (float)Math.Clamp(v, 0f, 100f);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        if (_cpuProcessorUtilityCounter == null && _cpuProcessorTimeCounter == null)
+        {
+            var wmi = TryReadCpuPercentFromWmiFormattedTotal();
+            if (wmi.HasValue)
+                return wmi.Value;
+        }
+
         return ReadCpuPercentFromSystemTimes();
+    }
+
+    private static float? TryReadCpuPercentFromWmiFormattedTotal()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor WHERE Name='_Total'");
+            using var coll = searcher.Get();
+            foreach (ManagementObject mo in coll)
+            {
+                try
+                {
+                    var o = mo["PercentProcessorTime"];
+                    if (o == null)
+                        continue;
+                    var d = Convert.ToDouble(o, CultureInfo.InvariantCulture);
+                    return (float)Math.Clamp(d, 0.0, 100.0);
+                }
+                finally
+                {
+                    mo.Dispose();
+                }
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return null;
     }
 
     private float ReadCpuPercentFromSystemTimes()
@@ -590,14 +663,24 @@ public sealed class ResourceMonitorSampler : IDisposable
 
             try
             {
-                _cpuTotalCounter?.Dispose();
+                _cpuProcessorUtilityCounter?.Dispose();
             }
             catch
             {
                 // ignored
             }
 
-            _cpuTotalCounter = null;
+            try
+            {
+                _cpuProcessorTimeCounter?.Dispose();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            _cpuProcessorUtilityCounter = null;
+            _cpuProcessorTimeCounter = null;
 
             foreach (var ad in _gpuAdapters)
             {

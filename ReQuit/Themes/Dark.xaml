@@ -15,6 +15,8 @@
     <Color x:Key="Rs.Color.TextMuted">#8B949E</Color>
     <Color x:Key="Rs.Color.Accent">#3DD4C3</Color>
     <Color x:Key="Rs.Color.AccentDim">#1F6F65</Color>
+    <!-- Цвет подтверждения условия в мониторе ресурсов (прогрессбар «Условие выполняется…»). -->
+    <Color x:Key="Rs.Color.AccentConfirm">#00ae4e</Color>
     <Color x:Key="Rs.Color.Danger">#F85149</Color>
     <Color x:Key="Rs.Color.DangerDim">#5C1E24</Color>
     <!-- Непрозрачный аналог #10FFFFFF поверх Rs.Color.Background (единая подложка карточки опций) -->
@@ -33,6 +35,7 @@
     <SolidColorBrush x:Key="Rs.Text.Muted" Color="{StaticResource Rs.Color.TextMuted}"/>
     <SolidColorBrush x:Key="Rs.Accent" Color="{StaticResource Rs.Color.Accent}"/>
     <SolidColorBrush x:Key="Rs.Accent.Dim" Color="{StaticResource Rs.Color.AccentDim}"/>
+    <SolidColorBrush x:Key="Rs.Accent.Confirm" Color="{StaticResource Rs.Color.AccentConfirm}"/>
     <SolidColorBrush x:Key="Rs.Danger" Color="{StaticResource Rs.Color.Danger}"/>
     <SolidColorBrush x:Key="Rs.Danger.Dim" Color="{StaticResource Rs.Color.DangerDim}"/>
     <SolidColorBrush x:Key="Rs.OptionCard.Background" Color="{StaticResource Rs.Color.OptionCard}"/>

@@ -100,6 +100,20 @@ public partial class MainWindow : Window
     /// <summary>Опрос ресурсов не должен выполняться в UI-потоке — иначе подвисания каждые 500 мс.</summary>
     private bool _resourcePollBusy;
 
+    // Подтверждение условия (анти-дребезг): после падения ниже порога держим 20 секунд.
+    private const int ResourceConfirmSeconds = 20;
+    private bool _resourceConfirmActive;
+    private DateTime _resourceConfirmStartUtc;
+    private DispatcherTimer? _resourceConfirmUiTimer;
+    private int _resourceConfirmLastShownRemain = -1;
+    private Storyboard? _resourceConfirmPulseStoryboard;
+
+    // Монитор ресурсов: ленивое (асинхронное) обнаружение устройств, чтобы старт окна не тормозил.
+    private int _resourceMonitorLoadToken;
+    private bool _resourceMonitorLoading;
+    private IReadOnlyList<GpuAdapterDiscovery>? _resourceDiscoveredGpus;
+    private IReadOnlyList<(string Id, string Label)>? _resourceDiscoveredNets;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -131,7 +145,7 @@ public partial class MainWindow : Window
             ApplyActionOptionCardVisuals();
             UpdateDelayOptionCardVisibility();
             ApplyDelayOptionCardVisuals();
-            InitResourceMonitorCombos();
+            // Не прогреваем монитор ресурсов на старте: это тяжёлое обнаружение GPU/сети и задерживает показ окна.
         };
 
         PreviewMouseRightButtonDown += MainWindow_PreviewMouseRightButtonDown;
@@ -164,7 +178,16 @@ public partial class MainWindow : Window
         ApplyActionVisualTheme();
         ApplyExactTimeDigitTheme();
         UpdateDelayOptionCardVisibility();
-        InitResourceMonitorCombos();
+        ApplyResourceMonitorLocalizedTexts();
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible && !_resourceMonitorLoading)
+            RepopulateResourceMonitorCombosFromCache();
+    }
+
+    private void ApplyResourceMonitorLocalizedTexts()
+    {
+        ResourceConditionIfText.Text = LocalizationService.T("MainWindow.ResourceConditionIf");
+        ResourceConditionDropsText.Text = LocalizationService.T("MainWindow.ResourceConditionDropsTo");
+        ResourceMonitorLoadingText.Text = LocalizationService.T("MainWindow.ResourceMonitorLoading");
     }
 
     private void UpdateDelayOptionCardVisibility()
@@ -250,8 +273,7 @@ public partial class MainWindow : Window
         _suppressResourceComboEvents = true;
         try
         {
-            ResourceConditionIfText.Text = LocalizationService.T("MainWindow.ResourceConditionIf");
-            ResourceConditionDropsText.Text = LocalizationService.T("MainWindow.ResourceConditionDropsTo");
+            ApplyResourceMonitorLocalizedTexts();
 
             SyncResourceThresholdTextFromValue();
 
@@ -279,6 +301,56 @@ public partial class MainWindow : Window
         {
             _suppressResourceComboEvents = false;
         }
+    }
+
+    private void RepopulateResourceMonitorCombosFromCache()
+    {
+        if (_resourceDiscoveredGpus == null || _resourceDiscoveredNets == null)
+            return;
+        PopulateResourceMonitorCombos(_resourceDiscoveredGpus, _resourceDiscoveredNets);
+    }
+
+    private void PopulateResourceMonitorCombos(
+        IReadOnlyList<GpuAdapterDiscovery> gpus,
+        IReadOnlyList<(string Id, string Label)> nets)
+    {
+        _suppressResourceComboEvents = true;
+        try
+        {
+            ApplyResourceMonitorLocalizedTexts();
+            SyncResourceThresholdTextFromValue();
+
+            ResourceKindCombo.Items.Clear();
+            ResourceKindCombo.Items.Add(new ComboBoxItem
+                { Content = LocalizationService.T("MainWindow.ResourceCpu"), Tag = ResourceTriggerKeys.Cpu });
+            ResourceKindCombo.Items.Add(new ComboBoxItem
+                { Content = LocalizationService.T("MainWindow.ResourceInternet"), Tag = ResourceTriggerKeys.Internet });
+
+            foreach (var ad in gpus)
+            {
+                ResourceKindCombo.Items.Add(new ComboBoxItem
+                    { Content = ad.DisplayLabel, Tag = ResourceTriggerKeys.Gpu(ad.SlotIndex) });
+            }
+
+            foreach (var (id, label) in nets)
+            {
+                ResourceKindCombo.Items.Add(new ComboBoxItem
+                    { Content = label, Tag = ResourceTriggerKeys.NetInterface(id) });
+            }
+
+            SelectResourceByTriggerKey(_resourceWatchKey);
+        }
+        finally
+        {
+            _suppressResourceComboEvents = false;
+        }
+    }
+
+    private void SetResourceMonitorLoading(bool isLoading)
+    {
+        _resourceMonitorLoading = isLoading;
+        ResourceMonitorLoadingOverlay.Visibility = isLoading ? Visibility.Visible : Visibility.Collapsed;
+        ResourceMonitorContent.Visibility = isLoading ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void SyncResourceThresholdTextFromValue()
@@ -373,6 +445,7 @@ public partial class MainWindow : Window
         ResourceThresholdTextBox.IsEnabled = true;
         ResourceThresholdUpButton.IsEnabled = true;
         ResourceThresholdDownButton.IsEnabled = true;
+        CancelResourceConfirm();
     }
 
     private void ApplyResourceMonitorWatchingUi()
@@ -388,13 +461,76 @@ public partial class MainWindow : Window
     private void OpenResourceMonitorFromMenu()
     {
         CloseExactTimeDialog();
-        InitResourceMonitorCombos();
         MainTimerStack.Visibility = Visibility.Visible;
         ResourceMonitorOverlay.Visibility = Visibility.Visible;
+        ApplyResourceMonitorLocalizedTexts();
+        SetResourceMonitorLoading(true);
+        // Важно: сначала дать WPF отрисовать «Загрузка...», и только потом запускать тяжёлое обнаружение GPU/сети.
+        Dispatcher.BeginInvoke(new Action(BeginLoadResourceMonitorCombosAsync), DispatcherPriority.Background);
+        // Важно: НЕ создаём ResourceMonitorSampler здесь — это тяжёлая инициализация (GPU counters) и она подвешивает UI до отрисовки.
         _resourceSampler?.Dispose();
-        _resourceSampler = new ResourceMonitorSampler();
-        EnsureResourcePollTimer();
+        _resourceSampler = null;
         UpdateStartEnabled();
+    }
+
+    private async void BeginLoadResourceMonitorCombosAsync()
+    {
+        var token = ++_resourceMonitorLoadToken;
+        // Принудительно применить видимость/раскладку «Загрузка...».
+        // (Если сразу заняться обнаружением устройств, UI может не успеть нарисовать оверлей мгновенно.)
+        try
+        {
+            ResourceMonitorLoadingOverlay.UpdateLayout();
+        }
+        catch
+        {
+            // ignored
+        }
+
+        IReadOnlyList<GpuAdapterDiscovery> gpus;
+        IReadOnlyList<(string Id, string Label)> nets;
+        ResourceMonitorSampler? sampler = null;
+
+        try
+        {
+            (gpus, nets, sampler) = await System.Threading.Tasks.Task.Run(() =>
+            {
+                var gg = ResourceMonitorSampler.DiscoverGpuAdapters();
+                var nn = ResourceMonitorSampler.DiscoverNetworkInterfaces();
+                var smp = new ResourceMonitorSampler();
+                return (gg, nn, smp);
+            });
+        }
+        catch
+        {
+            if (token != _resourceMonitorLoadToken)
+                return;
+
+            // Если что-то пошло не так — просто показываем интерфейс с минимумом (CPU/Интернет) через InitResourceMonitorCombos().
+            SetResourceMonitorLoading(false);
+            InitResourceMonitorCombos();
+            return;
+        }
+
+        if (token != _resourceMonitorLoadToken)
+        {
+            sampler?.Dispose();
+            return;
+        }
+        if (ResourceMonitorOverlay.Visibility != Visibility.Visible)
+        {
+            sampler?.Dispose();
+            return;
+        }
+
+        _resourceDiscoveredGpus = gpus;
+        _resourceDiscoveredNets = nets;
+        PopulateResourceMonitorCombos(_resourceDiscoveredGpus, _resourceDiscoveredNets);
+        SetResourceMonitorLoading(false);
+
+        _resourceSampler?.Dispose();
+        _resourceSampler = sampler;
+        EnsureResourcePollTimer();
     }
 
     private void CloseResourceMonitorPanel()
@@ -403,7 +539,7 @@ public partial class MainWindow : Window
             return;
 
         if (_state == TimerState.ResourceWaiting)
-            StopResourceConditionWatch();
+            StopResourceConditionWatch(closePanel: true);
         else
         {
             _resourceSampler?.Dispose();
@@ -501,6 +637,26 @@ public partial class MainWindow : Window
                     var v = ResourceMonitorSampler.GetPercentForKey(_resourceWatchKey, s);
                     var thr = _resourceThresholdPercent;
 
+                    if (_resourceConfirmActive)
+                    {
+                        // Нарушение условия (как просили): если показатель стал строго больше порога — отменяем.
+                        if (v > thr)
+                        {
+                            CancelResourceConfirm();
+                            _prevResourceValueForEdge = v;
+                            return;
+                        }
+
+                        var elapsed = DateTime.UtcNow - _resourceConfirmStartUtc;
+                        if (elapsed.TotalSeconds >= ResourceConfirmSeconds)
+                        {
+                            CancelResourceConfirm();
+                            OnResourceConditionMet();
+                        }
+
+                        return;
+                    }
+
                     if (!_resourceEdgePrimed)
                     {
                         _prevResourceValueForEdge = v;
@@ -510,11 +666,15 @@ public partial class MainWindow : Window
 
                     if (_prevResourceValueForEdge >= thr && v < thr)
                     {
-                        OnResourceConditionMet();
+                        BeginResourceConfirm();
                         return;
                     }
 
                     _prevResourceValueForEdge = v;
+                }
+                catch
+                {
+                    // Не даём приложению падать из-за UI/таймеров/анимаций при срабатывании условия.
                 }
                 finally
                 {
@@ -661,6 +821,7 @@ public partial class MainWindow : Window
         _resourceSampler = new ResourceMonitorSampler();
         _resourceEdgePrimed = false;
         _prevResourceValueForEdge = 0;
+        CancelResourceConfirm();
 
         ApplyResourceMonitorWatchingUi();
 
@@ -675,17 +836,9 @@ public partial class MainWindow : Window
         SyncTrayCountdownIcon();
     }
 
-    private void StopResourceConditionWatch()
+    private void StopResourceConditionWatch(bool closePanel = false)
     {
-        if (_resourcePollTimer != null)
-        {
-            _resourcePollTimer.Stop();
-            _resourcePollTimer.Tick -= OnResourcePollTick;
-            _resourcePollTimer = null;
-        }
-
-        _resourceSampler?.Dispose();
-        _resourceSampler = null;
+        CancelResourceConfirm();
 
         _state = TimerState.Idle;
         HoursDigit.SetValueSilent(_resourceWatchH);
@@ -693,7 +846,20 @@ public partial class MainWindow : Window
         SecondsDigit.SetValueSilent(_resourceWatchS);
         RecalcRemaining();
 
-        ApplyResourceMonitorPanelClosedUi();
+        // При нажатии «Стоп» в режиме ожидания остаёмся на экране монитора ресурсов.
+        // Закрываем панель только по кнопке X или при завершении условия.
+        if (closePanel)
+            ApplyResourceMonitorPanelClosedUi();
+        else
+        {
+            ResourceMonitorOverlay.Visibility = Visibility.Visible;
+            MainTimerStack.Visibility = Visibility.Visible;
+            ResourceKindCombo.IsEnabled = true;
+            ResourceThresholdTextBox.IsEnabled = true;
+            ResourceThresholdUpButton.IsEnabled = true;
+            ResourceThresholdDownButton.IsEnabled = true;
+            EnsureResourcePollTimer();
+        }
 
         SetDigitsReadOnly(false);
         SetOptionsEnabled(true);
@@ -702,10 +868,19 @@ public partial class MainWindow : Window
         UpdateButtonState();
         SyncTrayCountdownIcon();
         UpdateStartEnabled();
+
+        // Если панель закрываем — очищаем ресурсы мониторинга.
+        if (closePanel)
+        {
+            _resourceSampler?.Dispose();
+            _resourceSampler = null;
+            ReleaseResourcePollTimerIfIdle();
+        }
     }
 
     private void OnResourceConditionMet()
     {
+        CancelResourceConfirm();
         if (_resourcePollTimer != null)
         {
             _resourcePollTimer.Stop();
@@ -729,6 +904,95 @@ public partial class MainWindow : Window
         else
         {
             ExecuteAction();
+        }
+    }
+
+    private void BeginResourceConfirm()
+    {
+        _resourceConfirmActive = true;
+        _resourceConfirmStartUtc = DateTime.UtcNow;
+        ResourceConditionConfirmOverlay.Visibility = Visibility.Visible;
+        ResourceConditionConfirmText.Text = LocalizationService.T("MainWindow.ResourceConditionConfirming");
+        _resourceConfirmLastShownRemain = -1;
+        EnsureResourceConfirmUiTimer();
+        UpdateResourceConfirmUi(DateTime.UtcNow - _resourceConfirmStartUtc);
+        TryBeginResourceConfirmPulse();
+    }
+
+    private void CancelResourceConfirm()
+    {
+        _resourceConfirmActive = false;
+        _resourceConfirmUiTimer?.Stop();
+        TryStopResourceConfirmPulse();
+        try
+        {
+            ResourceConditionConfirmOverlay.Visibility = Visibility.Collapsed;
+            ResourceConditionConfirmProgress.Value = 0;
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    private void EnsureResourceConfirmUiTimer()
+    {
+        if (_resourceConfirmUiTimer != null)
+        {
+            _resourceConfirmUiTimer.Start();
+            return;
+        }
+
+        _resourceConfirmUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        _resourceConfirmUiTimer.Tick += (_, _) =>
+        {
+            if (!_resourceConfirmActive)
+            {
+                _resourceConfirmUiTimer?.Stop();
+                return;
+            }
+
+            UpdateResourceConfirmUi(DateTime.UtcNow - _resourceConfirmStartUtc);
+        };
+        _resourceConfirmUiTimer.Start();
+    }
+
+    private void TryBeginResourceConfirmPulse()
+    {
+        if (!IsLoaded)
+            return;
+        _resourceConfirmPulseStoryboard ??= TryFindResource("ResourceConfirmPulseStoryboard") as Storyboard;
+        try
+        {
+            _resourceConfirmPulseStoryboard?.Begin(this, isControllable: true);
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    private void TryStopResourceConfirmPulse()
+    {
+        try
+        {
+            _resourceConfirmPulseStoryboard?.Stop(this);
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    private void UpdateResourceConfirmUi(TimeSpan elapsed)
+    {
+        var sec = Math.Clamp(elapsed.TotalSeconds, 0, ResourceConfirmSeconds);
+        ResourceConditionConfirmProgress.Value = sec;
+        var remain = Math.Max(0, ResourceConfirmSeconds - (int)Math.Floor(elapsed.TotalSeconds));
+        if (remain != _resourceConfirmLastShownRemain)
+        {
+            _resourceConfirmLastShownRemain = remain;
+            ResourceConditionConfirmSubText.Text = LocalizationService.T("MainWindow.ResourceConditionConfirmingSub", remain);
         }
     }
 
@@ -1832,7 +2096,20 @@ public partial class MainWindow : Window
     private void BtnStartStop_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
+        ResetTimerFromStartButton();
+    }
 
+    private void BtnStartStop_OnMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle)
+            return;
+
+        e.Handled = true;
+        ResetTimerFromStartButton();
+    }
+
+    private void ResetTimerFromStartButton()
+    {
         if (_state == TimerState.SignalFinished)
             return;
 

@@ -8,7 +8,7 @@ $designFolder = -join @(
 $src = [System.IO.Path]::Combine($parent, $designFolder, 'ico-q.ico')
 $dst = [System.IO.Path]::Combine($root, 'ReQuit', 'app.ico')
 if (-not (Test-Path -LiteralPath $src)) {
-    Write-Error "Not found: $src"
-    exit 1
+    Write-Warning "Design icon not found, skipping: $src"
+    exit 0
 }
 Copy-Item -LiteralPath $src -Destination $dst -Force

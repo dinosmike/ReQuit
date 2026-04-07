@@ -65,6 +65,16 @@ public partial class TimerDigitGroup : UserControl
         set => SetValue(ShutdownActionProperty, value);
     }
 
+    public static readonly DependencyProperty UnitLabelOffsetYProperty =
+        DependencyProperty.Register(nameof(UnitLabelOffsetY), typeof(double), typeof(TimerDigitGroup),
+            new PropertyMetadata(0d));
+
+    public double UnitLabelOffsetY
+    {
+        get => (double)GetValue(UnitLabelOffsetYProperty);
+        set => SetValue(UnitLabelOffsetYProperty, value);
+    }
+
     public int Value => _value;
 
     public event Action? ValueChanged;

@@ -16,7 +16,11 @@
                    FontWeight="SemiBold"
                    Foreground="{DynamicResource Rs.Text.Muted}"
                    HorizontalAlignment="Center"
-                   Margin="0,0,0,3"/>
+                   Margin="0,0,0,3">
+            <TextBlock.RenderTransform>
+                <TranslateTransform Y="{Binding UnitLabelOffsetY, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
 
         <!-- Digit display card -->
         <Border x:Name="DigitBorder" Grid.Row="1"
