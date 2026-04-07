@@ -13,6 +13,8 @@
     <Color x:Key="Rs.Color.Border">#30363D</Color>
     <Color x:Key="Rs.Color.TextPrimary">#E6EDF3</Color>
     <Color x:Key="Rs.Color.TextMuted">#8B949E</Color>
+    <!-- Более тёмный muted для неактивных/второстепенных подписей -->
+    <Color x:Key="Rs.Color.TextMutedDim">#66707A</Color>
     <Color x:Key="Rs.Color.Accent">#3DD4C3</Color>
     <Color x:Key="Rs.Color.AccentDim">#1F6F65</Color>
     <!-- Цвет подтверждения условия в мониторе ресурсов (прогрессбар «Условие выполняется…»). -->
@@ -33,6 +35,7 @@
     <SolidColorBrush x:Key="Rs.Border" Color="{StaticResource Rs.Color.Border}"/>
     <SolidColorBrush x:Key="Rs.Text.Primary" Color="{StaticResource Rs.Color.TextPrimary}"/>
     <SolidColorBrush x:Key="Rs.Text.Muted" Color="{StaticResource Rs.Color.TextMuted}"/>
+    <SolidColorBrush x:Key="Rs.Text.MutedDim" Color="{StaticResource Rs.Color.TextMutedDim}"/>
     <SolidColorBrush x:Key="Rs.Accent" Color="{StaticResource Rs.Color.Accent}"/>
     <SolidColorBrush x:Key="Rs.Accent.Dim" Color="{StaticResource Rs.Color.AccentDim}"/>
     <SolidColorBrush x:Key="Rs.Accent.Confirm" Color="{StaticResource Rs.Color.AccentConfirm}"/>
@@ -416,6 +419,58 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Rs.Button.PressedBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Rs.CheckBox" TargetType="CheckBox">
+        <!-- По умолчанию (unchecked) текст серый -->
+        <Setter Property="Foreground" Value="{DynamicResource Rs.Text.MutedDim}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border x:Name="Box"
+                                Width="16" Height="16"
+                                CornerRadius="4"
+                                Background="{DynamicResource Rs.Surface}"
+                                BorderBrush="{DynamicResource Rs.Border}"
+                                BorderThickness="1"
+                                Margin="0,0,10,0"
+                                SnapsToDevicePixels="True">
+                            <Path x:Name="Tick"
+                                  Data="M2,8 L6,12 L14,3"
+                                  StrokeThickness="2"
+                                  Stroke="{DynamicResource Rs.Text.Primary}"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  Visibility="Collapsed"/>
+                        </Border>
+                        <TextBlock x:Name="ContentText"
+                                   VerticalAlignment="Center"
+                                   Text="{TemplateBinding Content}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Rs.Accent}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="#1A3DD4C3"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Rs.Accent}"/>
+                            <Setter TargetName="Tick" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Tick" Property="Stroke" Value="{DynamicResource Rs.Accent}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Rs.Text.Primary}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>

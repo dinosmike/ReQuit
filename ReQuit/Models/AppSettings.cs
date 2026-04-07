@@ -40,6 +40,9 @@ public sealed class TimerSettings
 
     /// <summary>Порог в процентах (0–100): срабатывание при падении нагрузки выбранного ресурса строго ниже этого значения.</summary>
     public int ResourceThresholdPercent { get; set; } = 10;
+
+    /// <summary>Создавать скриншот в момент подтверждённого срабатывания условия монитора ресурсов.</summary>
+    public bool ResourceTakeScreenshotOnTrigger { get; set; }
 }
 
 public sealed class WindowSettings

@@ -353,14 +353,10 @@ public partial class TimerDigitGroup : UserControl
 
     // ── Mouse drag ──────────────────────────────────────────
 
-    private void OnDigitPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    private void ResetToZeroFromPointer()
     {
-        if (e.ChangedButton != MouseButton.Middle)
-            return;
         if (IsReadOnly)
             return;
-
-        e.Handled = true;
 
         if (_value == 0)
             return;
@@ -374,9 +370,18 @@ public partial class TimerDigitGroup : UserControl
         ValueChanged?.Invoke();
     }
 
+    private void OnDigitPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle)
+            return;
+        e.Handled = true;
+        ResetToZeroFromPointer();
+    }
+
     private void OnDigitMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
+        ResetToZeroFromPointer();
     }
 
     private void OnDigitMouseDown(object sender, MouseButtonEventArgs e)

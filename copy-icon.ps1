@@ -1,4 +1,5 @@
-# Copies design ICO into the project. Source folder name is built from Unicode code points (ASCII-only file).
+# Optional design ICO sync.
+# If design icon is not present outside the repo, do nothing (no warnings) because app.ico is already part of the project.
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $parent = Split-Path $root -Parent
@@ -8,7 +9,6 @@ $designFolder = -join @(
 $src = [System.IO.Path]::Combine($parent, $designFolder, 'ico-q.ico')
 $dst = [System.IO.Path]::Combine($root, 'ReQuit', 'app.ico')
 if (-not (Test-Path -LiteralPath $src)) {
-    Write-Warning "Design icon not found, skipping: $src"
     exit 0
 }
 Copy-Item -LiteralPath $src -Destination $dst -Force

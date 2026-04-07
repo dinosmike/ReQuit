@@ -499,27 +499,49 @@
                         </StackPanel>
                     </Border>
 
-                    <Button x:Name="TitleBarLangButton"
-                            Grid.Column="1"
-                            Margin="0,0,8,0"
-                            MinHeight="36"
-                            Padding="12,6"
-                            VerticalAlignment="Center"
-                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                            Click="TitleBarLanguage_OnClick"
-                            Style="{StaticResource Rs.Button}"
-                            ToolTip="{DynamicResource Loc_MainWindow_LanguageTooltip}">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Click="LanguageMenuItem_OnClick"
-                                          Header="Русский"
-                                          Tag="ru"/>
-                                <MenuItem Click="LanguageMenuItem_OnClick"
-                                          Header="English"
-                                          Tag="en"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button x:Name="TitleBarMenuButton"
+                                Width="30"
+                                Height="30"
+                                Margin="0,0,8,0"
+                                Style="{StaticResource Rs.TitleBar.Button}"
+                                ToolTip="{DynamicResource Loc_MainWindow_TooltipMenu}"
+                                Click="TitleBarMenu_OnClick">
+                            <Grid Width="14" Height="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Height="2" CornerRadius="1" Background="{DynamicResource Rs.Text.Primary}" VerticalAlignment="Center"/>
+                                <Border Grid.Row="1" Height="2" CornerRadius="1" Background="{DynamicResource Rs.Text.Primary}" VerticalAlignment="Center"/>
+                                <Border Grid.Row="2" Height="2" CornerRadius="1" Background="{DynamicResource Rs.Text.Primary}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Button>
+
+                        <Button x:Name="TitleBarLangButton"
+                                MinHeight="36"
+                                Padding="12,6"
+                                VerticalAlignment="Center"
+                                Click="TitleBarLanguage_OnClick"
+                                Style="{StaticResource Rs.Button}"
+                                ToolTip="{DynamicResource Loc_MainWindow_LanguageTooltip}">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Click="LanguageMenuItem_OnClick"
+                                              Header="Русский"
+                                              Tag="ru"/>
+                                    <MenuItem Click="LanguageMenuItem_OnClick"
+                                              Header="English"
+                                              Tag="en"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
                         <Button x:Name="BtnMinimizeToTray"
@@ -599,8 +621,11 @@
                           HorizontalAlignment="Stretch"
                           Background="{DynamicResource Rs.Window.Background}">
                         <Grid x:Name="ResourceMonitorContent"
-                              Panel.ZIndex="0">
+                              Panel.ZIndex="0"
+                              Margin="0,-40,0,0">
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -772,7 +797,7 @@
                                                     <ProgressBar x:Name="ResourceConditionConfirmProgress"
                                                                  Height="8"
                                                                  Minimum="0"
-                                                                 Maximum="20"
+                                                                 Maximum="1"
                                                                  Value="0"
                                                                  Foreground="{DynamicResource Rs.Accent.Confirm}"
                                                                  Background="#252B33"/>
@@ -811,11 +836,30 @@
                                        Margin="0,0,0,0"
                                        TextWrapping="Wrap"
                                        TextAlignment="Center"/>
+
+                            <TextBlock x:Name="ResourceWaitStatusText"
+                                       Grid.Row="4"
+                                       FontSize="13"
+                                       Foreground="#0cb37a"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,8,0,0"
+                                       TextWrapping="Wrap"
+                                       TextAlignment="Center"/>
+
+                            <CheckBox x:Name="ResourceTakeScreenshotCheckBox"
+                                      Grid.Row="5"
+                                      HorizontalAlignment="Center"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource Rs.CheckBox}"
+                                      Content="{DynamicResource Loc_MainWindow_ResourceTakeScreenshot}"
+                                      Checked="ResourceTakeScreenshotCheckBox_OnChecked"
+                                      Unchecked="ResourceTakeScreenshotCheckBox_OnChecked"/>
                         </Grid>
 
                         <Grid x:Name="ResourceMonitorLoadingOverlay"
                               Visibility="Collapsed"
                               Panel.ZIndex="10"
+                              Margin="0,-40,0,0"
                               Background="{DynamicResource Rs.Window.Background}">
                             <StackPanel HorizontalAlignment="Center"
                                         VerticalAlignment="Center"

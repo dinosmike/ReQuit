@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
 
     private bool _actionIsSignal;
     private int _delaySeconds;
+    private bool _resourceTakeScreenshotOnTrigger;
 
     private bool _trayHideAnimating;
     private bool _trayShowAnimating;
@@ -100,8 +102,9 @@ public partial class MainWindow : Window
     /// <summary>Опрос ресурсов не должен выполняться в UI-потоке — иначе подвисания каждые 500 мс.</summary>
     private bool _resourcePollBusy;
 
-    // Подтверждение условия (анти-дребезг): после падения ниже порога держим 20 секунд.
-    private const int ResourceConfirmSeconds = 20;
+    // Подтверждение условия (анти-дребезг): сколько секунд должен заполняться лоадбар «Условие выполняется...».
+    // Меняй это значение в коде — UI и логика подстроятся автоматически.
+    private const int ResourceConfirmSeconds = 30;
     private bool _resourceConfirmActive;
     private DateTime _resourceConfirmStartUtc;
     private DispatcherTimer? _resourceConfirmUiTimer;
@@ -132,6 +135,7 @@ public partial class MainWindow : Window
 
         _resourceThresholdPercent = Math.Clamp(stored.ResourceThresholdPercent, 0, 100);
         _resourceWatchKey = MigrateResourceTriggerKey(stored);
+        _resourceTakeScreenshotOnTrigger = stored.ResourceTakeScreenshotOnTrigger;
 
         RecalcRemaining();
 
@@ -188,6 +192,7 @@ public partial class MainWindow : Window
         ResourceConditionIfText.Text = LocalizationService.T("MainWindow.ResourceConditionIf");
         ResourceConditionDropsText.Text = LocalizationService.T("MainWindow.ResourceConditionDropsTo");
         ResourceMonitorLoadingText.Text = LocalizationService.T("MainWindow.ResourceMonitorLoading");
+        ResourceTakeScreenshotCheckBox.Content = LocalizationService.T("MainWindow.ResourceTakeScreenshot");
     }
 
     private void UpdateDelayOptionCardVisibility()
@@ -215,7 +220,14 @@ public partial class MainWindow : Window
         s.Timer.ResourceTriggerKey = _resourceWatchKey;
         s.Timer.ResourceConditionKind = LegacyResourceConditionKind(_resourceWatchKey);
         s.Timer.ResourceThresholdPercent = _resourceThresholdPercent;
+        s.Timer.ResourceTakeScreenshotOnTrigger = _resourceTakeScreenshotOnTrigger;
         SettingsStorage.Save(s);
+    }
+
+    private void ResourceTakeScreenshotCheckBox_OnChecked(object sender, RoutedEventArgs e)
+    {
+        _resourceTakeScreenshotOnTrigger = ResourceTakeScreenshotCheckBox.IsChecked == true;
+        PersistTimerSettings();
     }
 
     private static string MigrateResourceTriggerKey(TimerSettings t)
@@ -359,6 +371,7 @@ public partial class MainWindow : Window
         try
         {
             ResourceThresholdTextBox.Text = _resourceThresholdPercent.ToString(System.Globalization.CultureInfo.CurrentCulture);
+            ResourceTakeScreenshotCheckBox.IsChecked = _resourceTakeScreenshotOnTrigger;
         }
         finally
         {
@@ -651,6 +664,8 @@ public partial class MainWindow : Window
                         if (elapsed.TotalSeconds >= ResourceConfirmSeconds)
                         {
                             CancelResourceConfirm();
+                            if (_resourceTakeScreenshotOnTrigger)
+                                TrySaveDesktopScreenshot();
                             OnResourceConditionMet();
                         }
 
@@ -779,8 +794,11 @@ public partial class MainWindow : Window
             var cv = (int)Math.Round(Math.Clamp(cur, 0, 100));
             line += " · " + LocalizationService.T("MainWindow.StatusResourceCurrent", cv);
         }
-
-        StatusText.Text = line;
+        // В режиме монитора ресурсов показываем статус внутри панели, а не вверху окна.
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible)
+            ResourceWaitStatusText.Text = line;
+        else
+            StatusText.Text = line;
     }
 
     private string GetResourceWatchDisplayName()
@@ -865,6 +883,7 @@ public partial class MainWindow : Window
         SetOptionsEnabled(true);
         StopColonBlink();
         StatusText.Text = "";
+        ResourceWaitStatusText.Text = "";
         UpdateButtonState();
         SyncTrayCountdownIcon();
         UpdateStartEnabled();
@@ -894,6 +913,7 @@ public partial class MainWindow : Window
         ApplyResourceMonitorPanelClosedUi();
 
         StatusText.Text = "";
+        ResourceWaitStatusText.Text = "";
 
         int delaySec = GetDelaySeconds();
         if (delaySec > 0)
@@ -914,9 +934,33 @@ public partial class MainWindow : Window
         ResourceConditionConfirmOverlay.Visibility = Visibility.Visible;
         ResourceConditionConfirmText.Text = LocalizationService.T("MainWindow.ResourceConditionConfirming");
         _resourceConfirmLastShownRemain = -1;
+        ResourceConditionConfirmProgress.Maximum = ResourceConfirmSeconds;
         EnsureResourceConfirmUiTimer();
         UpdateResourceConfirmUi(DateTime.UtcNow - _resourceConfirmStartUtc);
         TryBeginResourceConfirmPulse();
+    }
+
+    private void TrySaveDesktopScreenshot()
+    {
+        try
+        {
+            var bounds = System.Windows.Forms.SystemInformation.VirtualScreen;
+            using var bmp = new Bitmap(bounds.Width, bounds.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, new System.Drawing.Size(bounds.Width, bounds.Height), CopyPixelOperation.SourceCopy);
+            }
+
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            var stamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var safeKey = _resourceWatchKey.Replace(':', '_');
+            var path = Path.Combine(desktop, $"ReQuit_{stamp}_{safeKey}.png");
+            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        }
+        catch
+        {
+            // ignored
+        }
     }
 
     private void CancelResourceConfirm()
@@ -1639,9 +1683,7 @@ public partial class MainWindow : Window
     private void MainWindow_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Right) return;
-        if (_state != TimerState.Idle) return;
-        if (ExactTimeOverlay.Visibility == Visibility.Visible) return;
-        if (ResourceMonitorOverlay.Visibility == Visibility.Visible) return;
+        if (!CanOpenMainContextMenu()) return;
 
         // ПКМ по любой кнопке — не показывать «точное время» (на «Старт» — сброс, как раньше; на неактивной «Старт» — тишина)
         if (ShouldSuppressExactTimeContextMenu(e))
@@ -1651,13 +1693,44 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private bool CanOpenMainContextMenu()
+    {
+        if (_state != TimerState.Idle) return false;
+        if (ExactTimeOverlay.Visibility == Visibility.Visible) return false;
+        if (ResourceMonitorOverlay.Visibility == Visibility.Visible) return false;
+        if (SignalFinishedOverlay.Visibility == Visibility.Visible) return false;
+        if (DelayPhaseMainDimmer.Visibility == Visibility.Visible) return false;
+        return true;
+    }
+
+    private void TitleBarMenu_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!CanOpenMainContextMenu())
+            return;
+
+        OpenExactTimeContextMenu(sender as FrameworkElement);
+        e.Handled = true;
+    }
+
     private bool ShouldSuppressExactTimeContextMenu(MouseButtonEventArgs e)
     {
+        if (IsDescendantOfTimerDigitGroup(e.OriginalSource as DependencyObject))
+            return true;
         if (IsDescendantOfButton(e.OriginalSource as DependencyObject))
             return true;
         // Отключённая кнопка не в цепочке hit-test — клик уходит под неё, но координаты всё ещё над «Старт»
         if (IsMouseOverElement(BtnStartStop, e))
             return true;
+        return false;
+    }
+
+    private static bool IsDescendantOfTimerDigitGroup(DependencyObject? source)
+    {
+        for (var o = source; o != null; o = VisualTreeHelper.GetParent(o))
+        {
+            if (o is Controls.TimerDigitGroup)
+                return true;
+        }
         return false;
     }
 
@@ -1683,9 +1756,10 @@ public partial class MainWindow : Window
         return pt.X >= 0 && pt.Y >= 0 && pt.X <= w && pt.Y <= h;
     }
 
-    private void OpenExactTimeContextMenu()
+    private void OpenExactTimeContextMenu(FrameworkElement? placementTarget = null)
     {
         var cm = new ContextMenu();
+        cm.FontSize = 12;
         var item = new MenuItem();
         var header = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
         var clockIcon = new TextBlock
@@ -1693,14 +1767,15 @@ public partial class MainWindow : Window
             Text = "\uE823",
             FontFamily = Application.Current.TryFindResource("Rs.Font.Mdl2") as System.Windows.Media.FontFamily
                          ?? new System.Windows.Media.FontFamily("pack://application:,,,/Fonts/segmdl2.ttf#Segoe MDL2 Assets"),
-            FontSize = 16,
+            FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0)
+            Margin = new Thickness(0, 0, 8, 0)
         };
         clockIcon.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
         var label = new TextBlock
         {
             Text = LocalizationService.T("MainWindow.ExactTimeMenu"),
+            FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center
         };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
@@ -1717,14 +1792,15 @@ public partial class MainWindow : Window
             Text = "\uE9D2",
             FontFamily = Application.Current.TryFindResource("Rs.Font.Mdl2") as System.Windows.Media.FontFamily
                          ?? new System.Windows.Media.FontFamily("pack://application:,,,/Fonts/segmdl2.ttf#Segoe MDL2 Assets"),
-            FontSize = 16,
+            FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0)
+            Margin = new Thickness(0, 0, 8, 0)
         };
         monitorIcon.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
         var labelRes = new TextBlock
         {
             Text = LocalizationService.T("MainWindow.ResourceMonitorMenu"),
+            FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center
         };
         labelRes.SetResourceReference(TextBlock.ForegroundProperty, "Rs.Text.Primary");
@@ -1734,8 +1810,8 @@ public partial class MainWindow : Window
         itemRes.Click += (_, _) => OpenResourceMonitorFromMenu();
         cm.Items.Add(itemRes);
 
-        cm.PlacementTarget = this;
-        cm.Placement = PlacementMode.MousePoint;
+        cm.PlacementTarget = placementTarget ?? this;
+        cm.Placement = placementTarget != null ? PlacementMode.Bottom : PlacementMode.MousePoint;
         cm.IsOpen = true;
     }
 
