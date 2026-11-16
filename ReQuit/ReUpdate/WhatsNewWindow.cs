@@ -91,6 +91,7 @@ public sealed class WhatsNewWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(22, 4, 16, 8),
         };
+        scroll.Resources.Add(typeof(System.Windows.Controls.Primitives.ScrollBar), ScrollBarStyle(c));
 
         _toggle.Foreground = Brush(c.TextMuted);
         _toggle.FontSize = 13;
@@ -184,6 +185,46 @@ public sealed class WhatsNewWindow : Window
         var b = new SolidColorBrush(color);
         b.Freeze();
         return b;
+    }
+
+    /// <summary>Тонкая полоса прокрутки: бирюзовый ползунок на тёмной дорожке, без стрелок.</summary>
+    private static Style ScrollBarStyle(ReUpdateColors c)
+    {
+        static string Hex(Color x) => $"#{x.R:X2}{x.G:X2}{x.B:X2}";
+        string track = Hex(c.ScrollTrack), thumb = Hex(c.Accent);
+        var xaml = $@"
+            <Style TargetType='ScrollBar'
+                   xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
+                   xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
+              <Setter Property='Width' Value='4'/>
+              <Setter Property='MinWidth' Value='4'/>
+              <Setter Property='Margin' Value='0,0,6,0'/>
+              <Setter Property='Template'>
+                <Setter.Value>
+                  <ControlTemplate TargetType='ScrollBar'>
+                    <Border CornerRadius='2' Background='{track}'>
+                      <Track x:Name='PART_Track' IsDirectionReversed='True'>
+                        <Track.Thumb>
+                          <Thumb>
+                            <Thumb.Template>
+                              <ControlTemplate TargetType='Thumb'>
+                                <Border x:Name='B' CornerRadius='2' Background='{thumb}' Opacity='0.7'/>
+                                <ControlTemplate.Triggers>
+                                  <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='B' Property='Opacity' Value='1'/></Trigger>
+                                  <Trigger Property='IsDragging' Value='True'><Setter TargetName='B' Property='Opacity' Value='1'/></Trigger>
+                                </ControlTemplate.Triggers>
+                              </ControlTemplate>
+                            </Thumb.Template>
+                          </Thumb>
+                        </Track.Thumb>
+                      </Track>
+                    </Border>
+                  </ControlTemplate>
+                </Setter.Value>
+              </Setter>
+            </Style>
+            ";
+        return (Style)System.Windows.Markup.XamlReader.Parse(xaml);
     }
 
     /// <summary>Кнопка без системной рамки и подсветки.</summary>

@@ -66,4 +66,6 @@ public sealed class ReUpdateColors
     public Color TextMuted { get; set; } = Color.FromRgb(0x8B, 0x94, 0x9E);
     public Color Accent { get; set; } = Color.FromRgb(0x3D, 0xD4, 0xC3);
     public Color BadgeBackground { get; set; } = Color.FromRgb(0x12, 0x2A, 0x28);
+    /// <summary>Дорожка полосы прокрутки в окне «Что нового» (ползунок — цвет Accent).</summary>
+    public Color ScrollTrack { get; set; } = Color.FromRgb(0x1F, 0x25, 0x2D);
 }
