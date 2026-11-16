@@ -121,10 +121,31 @@
                         <TextBlock FontSize="13"
                                    Foreground="{DynamicResource Rs.Text.Muted}"
                                    Text="{DynamicResource Loc_About_VersionLabel}"/>
-                        <TextBlock FontSize="13"
-                                   Foreground="{DynamicResource Rs.Text.Muted}"
-                                   Text=" 1.0"/>
+                        <TextBlock x:Name="VersionValue"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource Rs.Text.Muted}"/>
+                        <!-- «Что нового» с точкой, пока новое не прочитано (модуль ReUpdate). -->
+                        <TextBlock Margin="14,0,0,0" FontSize="13">
+                            <Hyperlink Style="{StaticResource Rs.About.DonateLink}"
+                                       Click="WhatsNew_OnClick">
+                                <Run Text="{DynamicResource Loc_About_WhatsNew}"/>
+                            </Hyperlink>
+                        </TextBlock>
+                        <Ellipse x:Name="WhatsNewDotAbout"
+                                 Width="7" Height="7"
+                                 Margin="4,0,0,6"
+                                 VerticalAlignment="Center"
+                                 Fill="{DynamicResource Rs.Accent}"
+                                 Visibility="Collapsed"/>
                     </StackPanel>
+
+                    <CheckBox x:Name="CheckForUpdatesCheckBox"
+                              Margin="0,12,0,0"
+                              FontSize="13"
+                              Style="{StaticResource Rs.CheckBox}"
+                              Content="{DynamicResource Loc_About_CheckForUpdates}"
+                              Checked="CheckForUpdatesCheckBox_OnChanged"
+                              Unchecked="CheckForUpdatesCheckBox_OnChanged"/>
 
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions>

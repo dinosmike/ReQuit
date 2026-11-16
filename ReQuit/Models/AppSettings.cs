@@ -59,6 +59,9 @@ public sealed class WindowSettings
 public sealed class UiAppearanceSettings
 {
     public string? Language { get; set; }
+
+    /// <summary>Галочка «Проверять обновления» (модуль ReUpdate).</summary>
+    public bool CheckForUpdates { get; set; } = true;
 }
 
 public sealed class SettingsMeta

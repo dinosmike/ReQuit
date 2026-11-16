@@ -1,0 +1,16 @@
+{
+  "versions": [
+    {
+      "version": "1.1",
+      "date": "2026-11-16",
+      "ru": [
+        "Автообновление",
+        "Галочка «Проверять обновления» в окне «О программе»"
+      ],
+      "en": [
+        "Auto-update",
+        "\"Check for updates\" option in the About window"
+      ]
+    }
+  ]
+}

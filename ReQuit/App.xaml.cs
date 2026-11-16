@@ -15,6 +15,16 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Модуль ReUpdate: автообновление с GitHub и «Что нового» (см. ReUpdate\КАК ПОДКЛЮЧИТЬ.md).
+        ReUpdate.ReUpdateConfig.Owner = "dinosmike";
+        ReUpdate.ReUpdateConfig.Repo = "ReQuit";
+        ReUpdate.ReUpdateConfig.AssetName = "ReQuit.exe";
+        ReUpdate.ReUpdateConfig.AppDataFolderName = "ReQuit";
+        ReUpdate.ReUpdateConfig.Language = () => LocalizationService.CurrentLanguageCode;
+        ReUpdate.ReUpdateConfig.AutoUpdateEnabled = () => SettingsStorage.Load().Ui.CheckForUpdates;
+        ReUpdate.Updater.CleanupAfterUpdate();
+        ReUpdate.WhatsNewState.Initialize();
+
         var settings = SettingsStorage.Load();
         var hadStoredLanguage = !string.IsNullOrWhiteSpace(settings.Ui.Language);
         var lang = hadStoredLanguage
@@ -34,8 +44,10 @@ public partial class App : Application
         _tray = new TrayService();
         LocalizationService.LanguageChanged += OnLocalizationLanguageChanged;
 
-        if (SettingsStorage.Load().Window.MinimizeToTrayOnStartup && MainWindow is MainWindow mw)
+        if (settings.Window.MinimizeToTrayOnStartup && MainWindow is MainWindow mw)
             mw.HideToTrayOnStartup();
+
+        ReUpdate.Updater.Start();
     }
 
     private void OnLocalizationLanguageChanged() => _tray?.RefreshTexts();

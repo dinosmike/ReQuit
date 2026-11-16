@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <OutputType>WinExe</OutputType>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <TargetFramework>net6.0-windows</TargetFramework>
@@ -37,6 +37,8 @@
     <Resource Include="Fonts\segoeuiz.ttf" />
     <Resource Include="Fonts\segmdl2.ttf" />
     <EmbeddedResource Include="Localization\*.json" />
+    <!-- История версий для окна «Что нового», если нет сети (модуль ReUpdate). changelog.json создаётся отдельно в корне репозитория. -->
+    <EmbeddedResource Include="..\changelog.json" LogicalName="changelog.json" />
   </ItemGroup>
 
   <Target Name="CopyDesignIcon" BeforeTargets="BeforeBuild">
