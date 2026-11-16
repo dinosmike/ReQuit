@@ -96,6 +96,15 @@ public partial class About
 
     private void Ok_OnClick(object sender, RoutedEventArgs e) => Close();
 
+    /// <summary>Скрыто: правый клик по «ОК» — сколько раз скачали и обновили программу (счётчики GitHub).</summary>
+    private async void Ok_OnRightClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        DownloadStatsText.Text = "…";
+        DownloadStatsText.Visibility = Visibility.Visible;
+        DownloadStatsText.Text = await ReUpdate.DownloadStats.LoadTextAsync();
+    }
+
     private void TitleBar_OnMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)

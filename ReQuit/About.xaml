@@ -198,14 +198,29 @@
                         </StackPanel>
                     </Grid>
 
-                    <Button MinWidth="100"
-                            Margin="0,20,0,0"
-                            HorizontalAlignment="Right"
-                            Padding="16,8"
-                            Style="{StaticResource Rs.Button.Accent}"
-                            Content="{DynamicResource Loc_About_Ok}"
-                            IsDefault="True"
-                            Click="Ok_OnClick"/>
+                    <Grid Margin="0,20,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Скрытая статистика скачиваний (правый клик по «ОК»); окно растёт по высоте само -->
+                        <TextBlock x:Name="DownloadStatsText"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource Rs.Text.Muted}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Bottom"
+                                   Margin="0,0,12,0"
+                                   Visibility="Collapsed"/>
+                        <Button Grid.Column="1"
+                                MinWidth="100"
+                                VerticalAlignment="Bottom"
+                                Padding="16,8"
+                                Style="{StaticResource Rs.Button.Accent}"
+                                Content="{DynamicResource Loc_About_Ok}"
+                                IsDefault="True"
+                                Click="Ok_OnClick"
+                                PreviewMouseRightButtonUp="Ok_OnRightClick"/>
+                    </Grid>
                 </StackPanel>
             </Border>
         </DockPanel>
